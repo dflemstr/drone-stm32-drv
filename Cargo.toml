@@ -1,0 +1,173 @@
+[workspace]
+members = [
+  "drv-adc",
+  "drv-dma",
+  "drv-etc",
+  "drv-i2c",
+  "drv-spi",
+]
+
+[package]
+name = "drone-stm32-drv"
+version = "0.9.0"
+authors = ["Valentine Valyaeff <valentine.valyaeff@gmail.com>"]
+description = "Drone for STM32. Peripheral drivers."
+readme = "README.md"
+license = "MIT/Apache-2.0"
+repository = "https://github.com/drone-os/drone-stm32-drv"
+
+[features]
+default = []
+stm32f100 = [
+  "drone-stm32-map/stm32f100",
+  "drone-stm32-drv-adc/stm32f100",
+  "drone-stm32-drv-dma/stm32f100",
+  "drone-stm32-drv-etc/stm32f100",
+  "drone-stm32-drv-i2c/stm32f100",
+  "drone-stm32-drv-spi/stm32f100",
+]
+stm32f101 = [
+  "drone-stm32-map/stm32f101",
+  "drone-stm32-drv-adc/stm32f101",
+  "drone-stm32-drv-dma/stm32f101",
+  "drone-stm32-drv-etc/stm32f101",
+  "drone-stm32-drv-i2c/stm32f101",
+  "drone-stm32-drv-spi/stm32f101",
+]
+stm32f102 = [
+  "drone-stm32-map/stm32f102",
+  "drone-stm32-drv-adc/stm32f102",
+  "drone-stm32-drv-dma/stm32f102",
+  "drone-stm32-drv-etc/stm32f102",
+  "drone-stm32-drv-i2c/stm32f102",
+  "drone-stm32-drv-spi/stm32f102",
+]
+stm32f103 = [
+  "drone-stm32-map/stm32f103",
+  "drone-stm32-drv-adc/stm32f103",
+  "drone-stm32-drv-dma/stm32f103",
+  "drone-stm32-drv-etc/stm32f103",
+  "drone-stm32-drv-i2c/stm32f103",
+  "drone-stm32-drv-spi/stm32f103",
+]
+stm32f107 = [
+  "drone-stm32-map/stm32f107",
+  "drone-stm32-drv-adc/stm32f107",
+  "drone-stm32-drv-dma/stm32f107",
+  "drone-stm32-drv-etc/stm32f107",
+  "drone-stm32-drv-i2c/stm32f107",
+  "drone-stm32-drv-spi/stm32f107",
+]
+stm32l4x1 = [
+  "drone-stm32-map/stm32l4x1",
+  "drone-stm32-drv-adc/stm32l4x1",
+  "drone-stm32-drv-dma/stm32l4x1",
+  "drone-stm32-drv-etc/stm32l4x1",
+  "drone-stm32-drv-i2c/stm32l4x1",
+  "drone-stm32-drv-spi/stm32l4x1",
+]
+stm32l4x2 = [
+  "drone-stm32-map/stm32l4x2",
+  "drone-stm32-drv-adc/stm32l4x2",
+  "drone-stm32-drv-dma/stm32l4x2",
+  "drone-stm32-drv-etc/stm32l4x2",
+  "drone-stm32-drv-i2c/stm32l4x2",
+  "drone-stm32-drv-spi/stm32l4x2",
+]
+stm32l4x3 = [
+  "drone-stm32-map/stm32l4x3",
+  "drone-stm32-drv-adc/stm32l4x3",
+  "drone-stm32-drv-dma/stm32l4x3",
+  "drone-stm32-drv-etc/stm32l4x3",
+  "drone-stm32-drv-i2c/stm32l4x3",
+  "drone-stm32-drv-spi/stm32l4x3",
+]
+stm32l4x5 = [
+  "drone-stm32-map/stm32l4x5",
+  "drone-stm32-drv-adc/stm32l4x5",
+  "drone-stm32-drv-dma/stm32l4x5",
+  "drone-stm32-drv-etc/stm32l4x5",
+  "drone-stm32-drv-i2c/stm32l4x5",
+  "drone-stm32-drv-spi/stm32l4x5",
+]
+stm32l4x6 = [
+  "drone-stm32-map/stm32l4x6",
+  "drone-stm32-drv-adc/stm32l4x6",
+  "drone-stm32-drv-dma/stm32l4x6",
+  "drone-stm32-drv-etc/stm32l4x6",
+  "drone-stm32-drv-i2c/stm32l4x6",
+  "drone-stm32-drv-spi/stm32l4x6",
+]
+stm32l4r5 = [
+  "drone-stm32-map/stm32l4r5",
+  "drone-stm32-drv-adc/stm32l4r5",
+  "drone-stm32-drv-dma/stm32l4r5",
+  "drone-stm32-drv-etc/stm32l4r5",
+  "drone-stm32-drv-i2c/stm32l4r5",
+  "drone-stm32-drv-spi/stm32l4r5",
+]
+stm32l4r7 = [
+  "drone-stm32-map/stm32l4r7",
+  "drone-stm32-drv-adc/stm32l4r7",
+  "drone-stm32-drv-dma/stm32l4r7",
+  "drone-stm32-drv-etc/stm32l4r7",
+  "drone-stm32-drv-i2c/stm32l4r7",
+  "drone-stm32-drv-spi/stm32l4r7",
+]
+stm32l4r9 = [
+  "drone-stm32-map/stm32l4r9",
+  "drone-stm32-drv-adc/stm32l4r9",
+  "drone-stm32-drv-dma/stm32l4r9",
+  "drone-stm32-drv-etc/stm32l4r9",
+  "drone-stm32-drv-i2c/stm32l4r9",
+  "drone-stm32-drv-spi/stm32l4r9",
+]
+stm32l4s5 = [
+  "drone-stm32-map/stm32l4s5",
+  "drone-stm32-drv-adc/stm32l4s5",
+  "drone-stm32-drv-dma/stm32l4s5",
+  "drone-stm32-drv-etc/stm32l4s5",
+  "drone-stm32-drv-i2c/stm32l4s5",
+  "drone-stm32-drv-spi/stm32l4s5",
+]
+stm32l4s7 = [
+  "drone-stm32-map/stm32l4s7",
+  "drone-stm32-drv-adc/stm32l4s7",
+  "drone-stm32-drv-dma/stm32l4s7",
+  "drone-stm32-drv-etc/stm32l4s7",
+  "drone-stm32-drv-i2c/stm32l4s7",
+  "drone-stm32-drv-spi/stm32l4s7",
+]
+stm32l4s9 = [
+  "drone-stm32-map/stm32l4s9",
+  "drone-stm32-drv-adc/stm32l4s9",
+  "drone-stm32-drv-dma/stm32l4s9",
+  "drone-stm32-drv-etc/stm32l4s9",
+  "drone-stm32-drv-i2c/stm32l4s9",
+  "drone-stm32-drv-spi/stm32l4s9",
+]
+
+[dependencies.drone-stm32-map]
+version = "0.9.0"
+git = "https://github.com/drone-os/drone-stm32-map"
+# path = "../drone-stm32-map"
+
+[dependencies.drone-stm32-drv-adc]
+version = "=0.9.0"
+path = "drv-adc"
+
+[dependencies.drone-stm32-drv-dma]
+version = "=0.9.0"
+path = "drv-dma"
+
+[dependencies.drone-stm32-drv-etc]
+version = "=0.9.0"
+path = "drv-etc"
+
+[dependencies.drone-stm32-drv-i2c]
+version = "=0.9.0"
+path = "drv-i2c"
+
+[dependencies.drone-stm32-drv-spi]
+version = "=0.9.0"
+path = "drv-spi"
