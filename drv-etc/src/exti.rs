@@ -1,10 +1,10 @@
 //! Extended interrupts and events controller.
 
 use drone_core::drv::Resource;
-use drone_stm32::fib::{self, Fiber};
-use drone_stm32::reg::marker::*;
-use drone_stm32::reg::prelude::*;
-use drone_stm32::thr::prelude::*;
+use drone_cortex_m::fib::{self, Fiber};
+use drone_cortex_m::reg::marker::*;
+use drone_cortex_m::reg::prelude::*;
+use drone_cortex_m::thr::prelude::*;
 #[cfg(any(
   feature = "stm32f100",
   feature = "stm32f101",

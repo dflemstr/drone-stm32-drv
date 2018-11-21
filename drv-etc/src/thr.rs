@@ -1,7 +1,7 @@
 //! Drone threading system resources.
 
 use drone_core::thr::ThrTokens;
-use drone_stm32::reg::prelude::*;
+use drone_cortex_m::reg::prelude::*;
 use drone_stm32_map::reg::{mpu, scb};
 use nvic::Nvic;
 
@@ -62,8 +62,9 @@ impl Thr {
   #[inline(always)]
   pub fn init<T: ThrTokens>(
     self,
-    scb_ccr_init: impl for<'a, 'b> FnOnce(&'b mut scb::ccr::Hold<'a, Srt>)
-      -> &'b mut scb::ccr::Hold<'a, Srt>,
+    scb_ccr_init: impl for<'a, 'b> FnOnce(
+      &'b mut scb::ccr::Hold<'a, Srt>,
+    ) -> &'b mut scb::ccr::Hold<'a, Srt>,
   ) -> T {
     self
       .0

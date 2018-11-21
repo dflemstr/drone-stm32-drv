@@ -1,6 +1,6 @@
 //! Real-time clock.
 
-use drone_stm32::reg::prelude::*;
+use drone_cortex_m::reg::prelude::*;
 use drone_stm32_map::reg::{rcc, rtc};
 
 /// Real-time clock driver.

@@ -4,10 +4,10 @@ use core::marker::PhantomData;
 use core::ptr::{read_volatile, write_volatile};
 use drone_core::bitfield::Bitfield;
 use drone_core::drv::Resource;
-use drone_stm32::reg::marker::*;
-use drone_stm32::reg::prelude::*;
-use drone_stm32::reg::{RegGuard, RegGuardCnt, RegGuardRes};
-use drone_stm32::thr::prelude::*;
+use drone_cortex_m::reg::marker::*;
+use drone_cortex_m::reg::prelude::*;
+use drone_cortex_m::reg::{RegGuard, RegGuardCnt, RegGuardRes};
+use drone_cortex_m::thr::prelude::*;
 #[cfg(any(
   feature = "stm32l4x1",
   feature = "stm32l4x2",

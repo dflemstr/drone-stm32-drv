@@ -14,7 +14,7 @@
 #[allow(unused_imports)]
 #[macro_use]
 extern crate drone_core;
-extern crate drone_stm32;
+extern crate drone_cortex_m;
 extern crate drone_stm32_drv_dma;
 extern crate drone_stm32_map;
 extern crate failure;
@@ -29,7 +29,7 @@ pub mod spi;
 
 #[prelude_import]
 #[allow(unused_imports)]
-use drone_stm32::prelude::*;
+use drone_cortex_m::prelude::*;
 
 #[cfg(test)]
 use drone_core::heap;

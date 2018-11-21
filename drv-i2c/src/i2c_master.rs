@@ -1,8 +1,8 @@
 //! I2C master session.
 
-use drone_stm32::reg::prelude::*;
-use drone_stm32::reg::{RegGuard, RegGuardCnt};
-use drone_stm32::thr::prelude::*;
+use drone_cortex_m::reg::prelude::*;
+use drone_cortex_m::reg::{RegGuard, RegGuardCnt};
+use drone_cortex_m::thr::prelude::*;
 use drone_stm32_drv_dma::dma::{
   DmaBond, DmaBondOnRgc, DmaResCcr, DmaTransferError, DmaTxRes,
 };

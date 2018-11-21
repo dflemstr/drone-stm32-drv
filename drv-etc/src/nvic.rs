@@ -1,7 +1,7 @@
 //! Nested vectored interrupt controller.
 
 #[allow(unused_imports)]
-use drone_stm32::reg::prelude::*;
+use drone_cortex_m::reg::prelude::*;
 #[cfg(any(
   feature = "stm32f100",
   feature = "stm32f101",
