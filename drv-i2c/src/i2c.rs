@@ -156,8 +156,8 @@ where
 pub trait I2CRes:
   Resource + I2CResCr1 + I2CResCr2 + I2CResIsr + I2CResIcr
 {
-  type IntEv: IntToken<Ttt>;
-  type IntEr: IntToken<Ttt>;
+  type IntEv: IntToken<Rtt>;
+  type IntEr: IntToken<Rtt>;
   type Oar1: SRwRegBitBand;
   type Oar2: SRwRegBitBand;
   type Timingr: SRwRegBitBand;
@@ -710,36 +710,33 @@ where
     let timoutcf = *self.0.icr_timoutcf();
     let alertcf = *self.0.icr_alertcf();
     let peccf = *self.0.icr_peccf();
-    fib::add_future(
-      self.0.int_er(),
-      fib::new(move || loop {
-        if berr.read_bit_band() {
-          berrcf.set_bit_band();
-          break Err(I2CError::Berr);
-        }
-        if ovr.read_bit_band() {
-          ovrcf.set_bit_band();
-          break Err(I2CError::Ovr);
-        }
-        if arlo.read_bit_band() {
-          arlocf.set_bit_band();
-          break Err(I2CError::Arlo);
-        }
-        if timeout.read_bit_band() {
-          timoutcf.set_bit_band();
-          break Err(I2CError::Timeout);
-        }
-        if alert.read_bit_band() {
-          alertcf.set_bit_band();
-          break Err(I2CError::Alert);
-        }
-        if pecerr.read_bit_band() {
-          peccf.set_bit_band();
-          break Err(I2CError::Pecerr);
-        }
-        yield;
-      }),
-    )
+    self.0.int_er().add_future(fib::new(move || loop {
+      if berr.read_bit_band() {
+        berrcf.set_bit_band();
+        break Err(I2CError::Berr);
+      }
+      if ovr.read_bit_band() {
+        ovrcf.set_bit_band();
+        break Err(I2CError::Ovr);
+      }
+      if arlo.read_bit_band() {
+        arlocf.set_bit_band();
+        break Err(I2CError::Arlo);
+      }
+      if timeout.read_bit_band() {
+        timoutcf.set_bit_band();
+        break Err(I2CError::Timeout);
+      }
+      if alert.read_bit_band() {
+        alertcf.set_bit_band();
+        break Err(I2CError::Alert);
+      }
+      if pecerr.read_bit_band() {
+        peccf.set_bit_band();
+        break Err(I2CError::Pecerr);
+      }
+      yield;
+    }))
   }
 
   /// Returns a future, which resolves on I2C transfer failure event.
@@ -748,20 +745,17 @@ where
     let stopf = *self.0.isr_stopf();
     let nackcf = *self.0.icr_nackcf();
     let stopcf = *self.0.icr_stopcf();
-    fib::add_future(
-      self.0.int_ev(),
-      fib::new(move || loop {
-        if nackf.read_bit_band() {
-          nackcf.set_bit_band();
-          break Err(I2CBreak::Nack);
-        }
-        if stopf.read_bit_band() {
-          stopcf.set_bit_band();
-          break Err(I2CBreak::Stop);
-        }
-        yield;
-      }),
-    )
+    self.0.int_ev().add_future(fib::new(move || loop {
+      if nackf.read_bit_band() {
+        nackcf.set_bit_band();
+        break Err(I2CBreak::Nack);
+      }
+      if stopf.read_bit_band() {
+        stopcf.set_bit_band();
+        break Err(I2CBreak::Stop);
+      }
+      yield;
+    }))
   }
 
   #[inline]
@@ -820,7 +814,7 @@ where
 impl<T: I2CRes> Clone for I2COn<T> {
   #[inline(always)]
   fn clone(&self) -> Self {
-    Self(self.0)
+    I2COn(self.0)
   }
 }
 
@@ -901,8 +895,8 @@ macro_rules! i2c {
     #[allow(missing_docs)]
     pub struct $name_res<Ev, Er, Rt>
     where
-      Ev: $int_ev_ty<Ttt>,
-      Er: $int_er_ty<Ttt>,
+      Ev: $int_ev_ty<Rtt>,
+      Er: $int_er_ty<Rtt>,
       Rt: RegTag,
     {
       pub $i2c_ev: Ev,
@@ -930,8 +924,8 @@ macro_rules! i2c {
       ($reg: ident, $thr: ident, $rgc:path) => {
         <$crate::i2c::I2C<_, $rgc> as ::drone_core::drv::Driver>::new(
           $crate::i2c::$name_res {
-            $i2c_ev: $thr.$i2c_ev.to_trigger(),
-            $i2c_er: $thr.$i2c_er.to_trigger(),
+            $i2c_ev: $thr.$i2c_ev.to_regular(),
+            $i2c_er: $thr.$i2c_er.to_regular(),
             $i2c_cr1: $reg.$i2c_cr1,
             $i2c_cr2: $reg.$i2c_cr2,
             $i2c_oar1: $reg.$i2c_oar1,
@@ -951,8 +945,8 @@ macro_rules! i2c {
 
     impl<Ev, Er> Resource for $name_res<Ev, Er, Crt>
     where
-      Ev: $int_ev_ty<Ttt>,
-      Er: $int_er_ty<Ttt>,
+      Ev: $int_ev_ty<Rtt>,
+      Er: $int_er_ty<Rtt>,
     {
       type Source = $name_res<Ev, Er, Srt>;
 
@@ -979,8 +973,8 @@ macro_rules! i2c {
 
     impl<Ev, Er> I2CRes for $name_res<Ev, Er, Crt>
     where
-      Ev: $int_ev_ty<Ttt>,
-      Er: $int_er_ty<Ttt>,
+      Ev: $int_ev_ty<Rtt>,
+      Er: $int_er_ty<Rtt>,
     {
       type IntEv = Ev;
       type IntEr = Er;
@@ -1023,8 +1017,8 @@ macro_rules! i2c {
 
     impl<Ev, Er> I2CResCr1 for $name_res<Ev, Er, Crt>
     where
-      Ev: $int_ev_ty<Ttt>,
-      Er: $int_er_ty<Ttt>,
+      Ev: $int_ev_ty<Rtt>,
+      Er: $int_er_ty<Rtt>,
     {
       type Cr1Val = $i2c::cr1::Val;
       type Cr1 = $i2c::Cr1<Srt>;
@@ -1074,8 +1068,8 @@ macro_rules! i2c {
 
     impl<Ev, Er> I2CResCr2 for $name_res<Ev, Er, Crt>
     where
-      Ev: $int_ev_ty<Ttt>,
-      Er: $int_er_ty<Ttt>,
+      Ev: $int_ev_ty<Rtt>,
+      Er: $int_er_ty<Rtt>,
     {
       type Cr2Val = $i2c::cr2::Val;
       type Cr2 = $i2c::Cr2<Srt>;
@@ -1107,8 +1101,8 @@ macro_rules! i2c {
 
     impl<Ev, Er> I2CResIsr for $name_res<Ev, Er, Crt>
     where
-      Ev: $int_ev_ty<Ttt>,
-      Er: $int_er_ty<Ttt>,
+      Ev: $int_ev_ty<Rtt>,
+      Er: $int_er_ty<Rtt>,
     {
       type Isr = $i2c::Isr<Crt>;
       type IsrNackf = $i2c::isr::Nackf<Crt>;
@@ -1137,8 +1131,8 @@ macro_rules! i2c {
 
     impl<Ev, Er> I2CResIcr for $name_res<Ev, Er, Crt>
     where
-      Ev: $int_ev_ty<Ttt>,
-      Er: $int_er_ty<Ttt>,
+      Ev: $int_ev_ty<Rtt>,
+      Er: $int_er_ty<Rtt>,
     {
       type Icr = $i2c::Icr<Crt>;
       type IcrNackcf = $i2c::icr::Nackcf<Crt>;
@@ -1172,8 +1166,8 @@ macro_rules! i2c {
     impl<Ev, Er, T> I2CDmaRxRes<T> for $name_res<Ev, Er, Crt>
     where
       T: DmaBond,
-      Ev: $int_ev_ty<Ttt>,
-      Er: $int_er_ty<Ttt>,
+      Ev: $int_ev_ty<Rtt>,
+      Er: $int_er_ty<Rtt>,
     {
       #[inline(always)]
       fn dmamux_rx_init(
@@ -1196,9 +1190,9 @@ macro_rules! i2c {
       impl<Ev, Er, Rx, C> I2CDmaRxRes<$dma_rx_bond<Rx, C>>
         for $name_res<Ev, Er, Crt>
       where
-        Rx: $int_dma_rx<Ttt>,
-        Ev: $int_ev_ty<Ttt>,
-        Er: $int_er_ty<Ttt>,
+        Rx: $int_dma_rx<Rtt>,
+        Ev: $int_ev_ty<Rtt>,
+        Er: $int_er_ty<Rtt>,
         C: DmaBondOnRgc<$dma_rx_res<Rx, Crt>>,
       {
         #[inline(always)]
@@ -1224,8 +1218,8 @@ macro_rules! i2c {
     impl<Ev, Er, T> I2CDmaTxRes<T> for $name_res<Ev, Er, Crt>
     where
       T: DmaBond,
-      Ev: $int_ev_ty<Ttt>,
-      Er: $int_er_ty<Ttt>,
+      Ev: $int_ev_ty<Rtt>,
+      Er: $int_er_ty<Rtt>,
     {
       #[inline(always)]
       fn dmamux_tx_init(
@@ -1248,9 +1242,9 @@ macro_rules! i2c {
       impl<Ev, Er, Tx, C> I2CDmaTxRes<$dma_tx_bond<Tx, C>>
         for $name_res<Ev, Er, Crt>
       where
-        Tx: $int_dma_tx<Ttt>,
-        Ev: $int_ev_ty<Ttt>,
-        Er: $int_er_ty<Ttt>,
+        Tx: $int_dma_tx<Rtt>,
+        Ev: $int_ev_ty<Rtt>,
+        Er: $int_er_ty<Rtt>,
         C: DmaBondOnRgc<$dma_tx_res<Tx, Crt>>,
       {
         #[inline(always)]

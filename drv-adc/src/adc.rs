@@ -404,16 +404,13 @@ where
   /// Returns a future, which resolves on ADC ready event.
   pub fn ready(&self) -> impl Future<Item = (), Error = !> {
     let adrdy = *self.0.isr_adrdy();
-    fib::add_future(
-      self.0.int(),
-      fib::new(move || loop {
-        if adrdy.read_bit() {
-          adrdy.set_bit();
-          break Ok(());
-        }
-        yield;
-      }),
-    )
+    self.0.int().add_future(fib::new(move || loop {
+      if adrdy.read_bit() {
+        adrdy.set_bit();
+        break Ok(());
+      }
+      yield;
+    }))
   }
 }
 
@@ -568,7 +565,7 @@ where
 impl<T: AdcRes> Clone for AdcOn<T> {
   #[inline(always)]
   fn clone(&self) -> Self {
-    Self(self.0)
+    AdcOn(self.0)
   }
 }
 
@@ -607,7 +604,7 @@ where
 {
   #[inline(always)]
   fn clone(&self) -> Self {
-    Self(self.0, self.1.clone())
+    AdcCh18On(self.0, self.1.clone())
   }
 }
 
@@ -658,7 +655,7 @@ where
 {
   #[inline(always)]
   fn clone(&self) -> Self {
-    Self(self.0, self.1.clone())
+    AdcCh17On(self.0, self.1.clone())
   }
 }
 
@@ -709,7 +706,7 @@ where
 {
   #[inline(always)]
   fn clone(&self) -> Self {
-    Self(self.0, self.1.clone())
+    AdcVrefOn(self.0, self.1.clone())
   }
 }
 

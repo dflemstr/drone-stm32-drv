@@ -134,7 +134,7 @@ where
 /// SPI resource.
 #[allow(missing_docs)]
 pub trait SpiRes: Resource + SpiResCr1 + SpiResCr2 {
-  type Int: IntToken<Ttt>;
+  type Int: IntToken<Rtt>;
   type Crcpr: SRwRegBitBand;
   type Dr: CRwRegBitBand;
   type Rxcrcr: SRoRegBitBand;
@@ -645,7 +645,7 @@ where
 impl<T: SpiRes> Clone for SpiOn<T> {
   #[inline(always)]
   fn clone(&self) -> Self {
-    Self(self.0)
+    SpiOn(self.0)
   }
 }
 
@@ -723,7 +723,7 @@ macro_rules! spi {
 
     #[doc = $doc_res]
     #[allow(missing_docs)]
-    pub struct $name_res<I: $int_ty<Ttt>, Rt: RegTag> {
+    pub struct $name_res<I: $int_ty<Rtt>, Rt: RegTag> {
       pub $spi: I,
       pub $spi_cr1: $spi::Cr1<Srt>,
       pub $spi_cr2: $spi::Cr2<Srt>,
@@ -744,7 +744,7 @@ macro_rules! spi {
       ($reg:ident, $thr:ident, $rgc:path) => {
         <$crate::spi::Spi<_, $rgc> as ::drone_core::drv::Driver>::new(
           $crate::spi::$name_res {
-            $spi: $thr.$spi.to_trigger(),
+            $spi: $thr.$spi.to_regular(),
             $spi_cr1: $reg.$spi_cr1,
             $spi_cr2: $reg.$spi_cr2,
             $spi_crcpr: $reg.$spi_crcpr,
@@ -758,7 +758,7 @@ macro_rules! spi {
       };
     }
 
-    impl<I: $int_ty<Ttt>> Resource for $name_res<I, Crt> {
+    impl<I: $int_ty<Rtt>> Resource for $name_res<I, Crt> {
       type Source = $name_res<I, Srt>;
 
       #[inline(always)]
@@ -777,7 +777,7 @@ macro_rules! spi {
       }
     }
 
-    impl<I: $int_ty<Ttt>> SpiRes for $name_res<I, Crt> {
+    impl<I: $int_ty<Rtt>> SpiRes for $name_res<I, Crt> {
       type Int = I;
       type Crcpr = $spi::Crcpr<Srt>;
       type Dr = $spi::Dr<Crt>;
@@ -812,7 +812,7 @@ macro_rules! spi {
       res_impl!(RccApbEnrSpiEn, rcc_en, $rcc_apb_enr_spien);
     }
 
-    impl<I: $int_ty<Ttt>> SpiResCr1 for $name_res<I, Crt> {
+    impl<I: $int_ty<Rtt>> SpiResCr1 for $name_res<I, Crt> {
       type Cr1Val = $spi::cr1::Val;
       type Cr1 = $spi::Cr1<Srt>;
       type Cr1Bidimode = $spi::cr1::Bidimode<Srt>;
@@ -835,7 +835,7 @@ macro_rules! spi {
       res_impl!(Cr1Cpha, cr1_cpha, $spi_cr1.cpha);
     }
 
-    impl<I: $int_ty<Ttt>> SpiResCr2 for $name_res<I, Crt> {
+    impl<I: $int_ty<Rtt>> SpiResCr2 for $name_res<I, Crt> {
       type Cr2Val = $spi::cr2::Val;
       type Cr2 = $spi::Cr2<Srt>;
       type Cr2Txeie = $spi::cr2::Txeie<Srt>;
@@ -882,7 +882,7 @@ macro_rules! spi {
     impl<I, T> SpiDmaRxRes<T> for $name_res<I, Crt>
     where
       T: DmaBond,
-      I: $int_ty<Ttt>,
+      I: $int_ty<Rtt>,
     {
       #[inline(always)]
       fn dmamux_rx_init(
@@ -906,8 +906,8 @@ macro_rules! spi {
       $(#[$dma_rx_attr])*
       impl<I, Rx, C> SpiDmaRxRes<$dma_rx_bond<Rx, C>> for $name_res<I, Crt>
       where
-        Rx: $int_dma_rx<Ttt>,
-        I: $int_ty<Ttt>,
+        Rx: $int_dma_rx<Rtt>,
+        I: $int_ty<Rtt>,
         C: DmaBondOnRgc<$dma_rx_res<Rx, Crt>>,
       {
         #[cfg(any(
@@ -940,7 +940,7 @@ macro_rules! spi {
     impl<I, T> SpiDmaTxRes<T> for $name_res<I, Crt>
     where
       T: DmaBond,
-      I: $int_ty<Ttt>,
+      I: $int_ty<Rtt>,
     {
       #[inline(always)]
       fn dmamux_tx_init(
@@ -964,8 +964,8 @@ macro_rules! spi {
       $(#[$dma_tx_attr])*
       impl<I, Tx, C> SpiDmaTxRes<$dma_tx_bond<Tx, C>> for $name_res<I, Crt>
       where
-        Tx: $int_dma_tx<Ttt>,
-        I: $int_ty<Ttt>,
+        Tx: $int_dma_tx<Rtt>,
+        I: $int_ty<Rtt>,
         C: DmaBondOnRgc<$dma_tx_res<Tx, Crt>>,
       {
         #[cfg(any(

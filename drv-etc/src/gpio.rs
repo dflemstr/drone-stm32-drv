@@ -104,7 +104,7 @@ pub trait GpioPort<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type Afrl: RReg<T> + WReg<T>;
+  type Afrl: RwReg<T>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -118,7 +118,7 @@ pub trait GpioPort<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type Afrh: RReg<T> + WReg<T>;
+  type Afrh: RwReg<T>;
   #[cfg(any(
     feature = "stm32f100",
     feature = "stm32f101",
@@ -142,7 +142,7 @@ pub trait GpioPort<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32f103",
     feature = "stm32f107"
   ))]
-  type Crl: RReg<T> + WReg<T>;
+  type Crl: RwReg<T>;
   #[cfg(any(
     feature = "stm32f100",
     feature = "stm32f101",
@@ -150,12 +150,10 @@ pub trait GpioPort<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32f103",
     feature = "stm32f107"
   ))]
-  type Crh: RReg<T> + WReg<T>;
+  type Crh: RwReg<T>;
   type Idr: RoReg<T>;
-  type Lckr: RReg<T> + WReg<T>;
-  type LckrLckk: RegField<T, Reg = Self::Lckr>
-    + RRRegFieldBit<T>
-    + WWRegFieldBit<T>;
+  type Lckr: RwReg<T>;
+  type LckrLckk: RwRwRegFieldBit<T, Reg = Self::Lckr>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -169,8 +167,8 @@ pub trait GpioPort<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type Moder: RReg<T> + WReg<T>;
-  type Odr: RReg<T> + WReg<T>;
+  type Moder: RwReg<T>;
+  type Odr: RwReg<T>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -184,7 +182,7 @@ pub trait GpioPort<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type Ospeedr: RReg<T> + WReg<T>;
+  type Ospeedr: RwReg<T>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -198,7 +196,7 @@ pub trait GpioPort<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type Otyper: RReg<T> + WReg<T>;
+  type Otyper: RwReg<T>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -212,7 +210,7 @@ pub trait GpioPort<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type Pupdr: RReg<T> + WReg<T>;
+  type Pupdr: RwReg<T>;
 
   #[cfg(any(
     feature = "stm32l4x1",
@@ -351,7 +349,7 @@ pub trait GpioPort<T: RegTag>: Sized + Send + Sync + 'static {
 ))]
 #[allow(missing_docs)]
 pub trait GpioPortAscr<T: RegTag>: GpioPort<T> {
-  type Ascr: RReg<T> + WReg<T>;
+  type Ascr: RwReg<T>;
 
   res_decl!(Ascr, ascr, ascr_mut);
 }
@@ -375,7 +373,7 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type Afr: RReg<T> + WReg<T>;
+  type Afr: RwReg<T>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -389,9 +387,7 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type AfrAfr: RegField<T, Reg = Self::Afr>
-    + RRRegFieldBits<T>
-    + WWRegFieldBits<T>;
+  type AfrAfr: RwRwRegFieldBits<T, Reg = Self::Afr>;
   #[cfg(any(
     feature = "stm32f100",
     feature = "stm32f101",
@@ -421,10 +417,10 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type BrrBr: RegField<T, Reg = Self::Brr> + WoWoRegFieldBit<T>;
+  type BrrBr: WoWoRegFieldBit<T, Reg = Self::Brr>;
   type Bsrr: WoReg<T>;
-  type BsrrBr: RegField<T, Reg = Self::Bsrr> + WoWoRegFieldBit<T>;
-  type BsrrBs: RegField<T, Reg = Self::Bsrr> + WoWoRegFieldBit<T>;
+  type BsrrBr: WoWoRegFieldBit<T, Reg = Self::Bsrr>;
+  type BsrrBs: WoWoRegFieldBit<T, Reg = Self::Bsrr>;
   #[cfg(any(
     feature = "stm32f100",
     feature = "stm32f101",
@@ -432,7 +428,7 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32f103",
     feature = "stm32f107"
   ))]
-  type Cr: RReg<T> + WReg<T>;
+  type Cr: RwReg<T>;
   #[cfg(any(
     feature = "stm32f100",
     feature = "stm32f101",
@@ -440,9 +436,7 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32f103",
     feature = "stm32f107"
   ))]
-  type CrCnf: RegField<T, Reg = Self::Cr>
-    + RRRegFieldBits<T>
-    + WWRegFieldBits<T>;
+  type CrCnf: RwRwRegFieldBits<T, Reg = Self::Cr>;
   #[cfg(any(
     feature = "stm32f100",
     feature = "stm32f101",
@@ -450,15 +444,11 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32f103",
     feature = "stm32f107"
   ))]
-  type CrMode: RegField<T, Reg = Self::Cr>
-    + RRRegFieldBits<T>
-    + WWRegFieldBits<T>;
+  type CrMode: RwRwRegFieldBits<T, Reg = Self::Cr>;
   type Idr: RoReg<T>;
-  type IdrIdr: RegField<T, Reg = Self::Idr> + RegFieldBit<T> + RoRRegField<T>;
-  type Lckr: RReg<T> + WReg<T>;
-  type LckrLck: RegField<T, Reg = Self::Lckr>
-    + RRRegFieldBit<T>
-    + WWRegFieldBit<T>;
+  type IdrIdr: RoRoRegFieldBit<T, Reg = Self::Idr>;
+  type Lckr: RwReg<T>;
+  type LckrLck: RwRwRegFieldBit<T, Reg = Self::Lckr>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -472,7 +462,7 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type Moder: RReg<T> + WReg<T>;
+  type Moder: RwReg<T>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -486,13 +476,9 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type ModerModer: RegField<T, Reg = Self::Moder>
-    + RRRegFieldBits<T>
-    + WWRegFieldBits<T>;
-  type Odr: RReg<T> + WReg<T>;
-  type OdrOdr: RegField<T, Reg = Self::Odr>
-    + RRRegFieldBit<T>
-    + WWRegFieldBit<T>;
+  type ModerModer: RwRwRegFieldBits<T, Reg = Self::Moder>;
+  type Odr: RwReg<T>;
+  type OdrOdr: RwRwRegFieldBit<T, Reg = Self::Odr>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -506,7 +492,7 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type Ospeedr: RReg<T> + WReg<T>;
+  type Ospeedr: RwReg<T>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -520,9 +506,7 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type OspeedrOspeedr: RegField<T, Reg = Self::Ospeedr>
-    + RRRegFieldBits<T>
-    + WWRegFieldBits<T>;
+  type OspeedrOspeedr: RwRwRegFieldBits<T, Reg = Self::Ospeedr>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -536,7 +520,7 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type Otyper: RReg<T> + WReg<T>;
+  type Otyper: RwReg<T>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -550,9 +534,7 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type OtyperOt: RegField<T, Reg = Self::Otyper>
-    + RRRegFieldBit<T>
-    + WWRegFieldBit<T>;
+  type OtyperOt: RwRwRegFieldBit<T, Reg = Self::Otyper>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -566,7 +548,7 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type Pupdr: RReg<T> + WReg<T>;
+  type Pupdr: RwReg<T>;
   #[cfg(any(
     feature = "stm32l4x1",
     feature = "stm32l4x2",
@@ -580,9 +562,7 @@ pub trait GpioPin<T: RegTag>: Sized + Send + Sync + 'static {
     feature = "stm32l4s7",
     feature = "stm32l4s9"
   ))]
-  type PupdrPupdr: RegField<T, Reg = Self::Pupdr>
-    + RRRegFieldBits<T>
-    + WWRegFieldBits<T>;
+  type PupdrPupdr: RwRwRegFieldBits<T, Reg = Self::Pupdr>;
 
   #[cfg(any(
     feature = "stm32l4x1",
@@ -743,7 +723,7 @@ pub struct GpioOn<T: GpioRccRes>(T::RccAhb2EnrGpioen);
 impl<T: GpioRccRes> Clone for GpioOn<T> {
   #[inline(always)]
   fn clone(&self) -> Self {
-    Self(self.0)
+    GpioOn(self.0)
   }
 }
 

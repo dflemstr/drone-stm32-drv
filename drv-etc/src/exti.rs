@@ -172,19 +172,22 @@ impl<T: ExtiLnExtRes> ExtiLn<T> {
 impl<T: ExtiLnExtRes + ExtiLnConfRes> ExtiLn<T> {
   /// Returns a future, which resolves to `Ok(())` when the event is triggered.
   pub fn add_future(&self) -> impl Future<Item = (), Error = !> {
-    fib::add_future(self.0.int(), self.future_fib())
+    self.0.int().add_future(self.future_fib())
   }
 
   /// Returns a stream, which resolves to `Ok(())` each time the event is
   /// triggered. Resolves to `Err(ExtiLnOverflow)` on overflow.
   pub fn add_stream(&self) -> impl Stream<Item = (), Error = ExtiLnOverflow> {
-    fib::add_stream(self.0.int(), || Err(ExtiLnOverflow), self.stream_fib())
+    self
+      .0
+      .int()
+      .add_stream(|| Err(ExtiLnOverflow), self.stream_fib())
   }
 
   /// Returns a stream, which resolves to `Ok(())` each time the event is
   /// triggered. Skips on overflow.
   pub fn add_stream_skip(&self) -> impl Stream<Item = (), Error = !> {
-    fib::add_stream_skip(self.0.int(), self.stream_fib())
+    self.0.int().add_stream_skip(self.stream_fib())
   }
 
   fn stream_fib<E: Send>(

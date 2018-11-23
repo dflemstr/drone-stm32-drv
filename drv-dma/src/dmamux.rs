@@ -202,7 +202,7 @@ where
 impl<T: DmamuxRccRes> Clone for DmamuxOn<T> {
   #[inline(always)]
   fn clone(&self) -> Self {
-    Self(self.0)
+    DmamuxOn(self.0)
   }
 }
 

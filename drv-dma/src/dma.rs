@@ -114,7 +114,7 @@ pub struct Dma<T: DmaRes>(T);
 #[allow(missing_docs)]
 pub trait DmaRes: Resource + DmaResCcr + DmaResIfcr + DmaResIsr {
   type RccRes: DmaRccRes;
-  type Int: IntToken<Ttt>;
+  type Int: IntToken<Rtt>;
   type CmarVal: Bitfield<Bits = u32>;
   type Cmar: SRwReg<Val = Self::CmarVal>;
   type CmarMa: SRwRwRegFieldBits<Reg = Self::Cmar>;
@@ -574,20 +574,17 @@ impl<T: DmaRes> Dma<T> {
     let tcif = *self.0.isr_tcif();
     let cgif = *self.0.ifcr_cgif();
     let ctcif = *self.0.ifcr_ctcif();
-    fib::add_future(
-      self.0.int(),
-      fib::new(move || loop {
-        if teif.read_bit_band() {
-          cgif.set_bit_band();
-          break Err(DmaTransferError);
-        }
-        if tcif.read_bit_band() {
-          ctcif.set_bit_band();
-          break Ok(());
-        }
-        yield;
-      }),
-    )
+    self.0.int().add_future(fib::new(move || loop {
+      if teif.read_bit_band() {
+        cgif.set_bit_band();
+        break Err(DmaTransferError);
+      }
+      if tcif.read_bit_band() {
+        ctcif.set_bit_band();
+        break Ok(());
+      }
+      yield;
+    }))
   }
 
   /// Returns a future, which resolves on DMA half transfer event.
@@ -598,20 +595,17 @@ impl<T: DmaRes> Dma<T> {
     let htif = *self.0.isr_htif();
     let cgif = *self.0.ifcr_cgif();
     let chtif = *self.0.ifcr_chtif();
-    fib::add_future(
-      self.0.int(),
-      fib::new(move || loop {
-        if teif.read_bit_band() {
-          cgif.set_bit_band();
-          break Err(DmaTransferError);
-        }
-        if htif.read_bit_band() {
-          chtif.set_bit_band();
-          break Ok(());
-        }
-        yield;
-      }),
-    )
+    self.0.int().add_future(fib::new(move || loop {
+      if teif.read_bit_band() {
+        cgif.set_bit_band();
+        break Err(DmaTransferError);
+      }
+      if htif.read_bit_band() {
+        chtif.set_bit_band();
+        break Ok(());
+      }
+      yield;
+    }))
   }
 }
 
@@ -629,7 +623,7 @@ where
 impl<T: DmaRccRes> Clone for DmaOn<T> {
   #[inline(always)]
   fn clone(&self) -> Self {
-    Self(self.0)
+    DmaOn(self.0)
   }
 }
 
@@ -779,7 +773,7 @@ macro_rules! dma {
       $(#[$attr_ch])*
       #[doc = $doc_ch_res]
       #[allow(missing_docs)]
-      pub struct $name_ch_res<I: $int_ty<Ttt>, Rt: RegTag> {
+      pub struct $name_ch_res<I: $int_ty<Rtt>, Rt: RegTag> {
         pub $dma_ch: I,
         pub $dma_ccr: $dma::$ccr_ty<Srt>,
         pub $dma_cmar: $dma::$cmar_ty<Srt>,
@@ -808,7 +802,7 @@ macro_rules! dma {
       #[allow(missing_docs)]
       pub struct $name_ch_bond<I, C>
       where
-        I: $int_ty<Ttt>,
+        I: $int_ty<Rtt>,
         C: DmaBondOnRgc<$name_ch_res<I, Crt>>,
       {
         pub $dma_ch: $name_ch<I>,
@@ -850,7 +844,7 @@ macro_rules! dma {
         ($reg: ident, $thr: ident) => {
           <$crate::dma::Dma<_> as ::drone_core::drv::Driver>::new(
             $crate::dma::$name_ch_res {
-              $dma_ch: $thr.$dma_ch.to_trigger(),
+              $dma_ch: $thr.$dma_ch.to_regular(),
               $dma_ccr: $reg.$dma_ccr,
               $dma_cmar: $reg.$dma_cmar,
               $dma_cndtr: $reg.$dma_cndtr,
@@ -883,7 +877,7 @@ macro_rules! dma {
         ($reg: ident, $thr: ident) => {
           <$crate::dma::Dma<_> as ::drone_core::drv::Driver>::new(
             $crate::dma::$name_ch_res {
-              $dma_ch: $thr.$dma_ch.to_trigger(),
+              $dma_ch: $thr.$dma_ch.to_regular(),
               $dma_ccr: $reg.$dma_ccr,
               $dma_cmar: $reg.$dma_cmar,
               $dma_cndtr: $reg.$dma_cndtr,
@@ -902,7 +896,7 @@ macro_rules! dma {
       }
 
       $(#[$attr_ch])*
-      impl<I: $int_ty<Ttt>> Resource for $name_ch_res<I, Crt> {
+      impl<I: $int_ty<Rtt>> Resource for $name_ch_res<I, Crt> {
         type Source = $name_ch_res<I, Srt>;
 
         #[inline(always)]
@@ -934,7 +928,7 @@ macro_rules! dma {
       }
 
       $(#[$attr_ch])*
-      impl<I: $int_ty<Ttt>> DmaRes for $name_ch_res<I, Crt> {
+      impl<I: $int_ty<Rtt>> DmaRes for $name_ch_res<I, Crt> {
         type RccRes = $name_res<Crt>;
         type Int = I;
         type CmarVal = $dma::$cmar_path::Val;
@@ -995,7 +989,7 @@ macro_rules! dma {
       }
 
       $(#[$attr_ch])*
-      impl<I: $int_ty<Ttt>> DmaResCcr for $name_ch_res<I, Crt> {
+      impl<I: $int_ty<Rtt>> DmaResCcr for $name_ch_res<I, Crt> {
         type CcrVal = $dma::$ccr_path::Val;
         type Ccr = $dma::$ccr_ty<Srt>;
         type CcrMem2Mem = $dma::$ccr_path::Mem2Mem<Srt>;
@@ -1025,7 +1019,7 @@ macro_rules! dma {
       }
 
       $(#[$attr_ch])*
-      impl<I: $int_ty<Ttt>> DmaResIfcr for $name_ch_res<I, Crt> {
+      impl<I: $int_ty<Rtt>> DmaResIfcr for $name_ch_res<I, Crt> {
         type Ifcr = $dma::Ifcr<Crt>;
         type IfcrCgif = $dma::ifcr::$cgif_ty<Crt>;
         type IfcrChtif = $dma::ifcr::$chtif_ty<Crt>;
@@ -1039,7 +1033,7 @@ macro_rules! dma {
       }
 
       $(#[$attr_ch])*
-      impl<I: $int_ty<Ttt>> DmaResIsr for $name_ch_res<I, Crt> {
+      impl<I: $int_ty<Rtt>> DmaResIsr for $name_ch_res<I, Crt> {
         type Isr = $dma::Isr<Crt>;
         type IsrGif = $dma::isr::$gif_ty<Crt>;
         type IsrHtif = $dma::isr::$htif_ty<Crt>;
@@ -1054,7 +1048,7 @@ macro_rules! dma {
 
       impl<I, C> DmaBond for $name_ch_bond<I, C>
       where
-        I: $int_ty<Ttt>,
+        I: $int_ty<Rtt>,
         C: DmaBondOnRgc<$name_ch_res<I, Crt>>,
       {
         type Rgc = C;

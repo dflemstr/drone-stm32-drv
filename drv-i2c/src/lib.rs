@@ -5,7 +5,6 @@
 #![feature(marker_trait_attr)]
 #![feature(never_type)]
 #![feature(prelude_import)]
-#![feature(self_struct_ctor)]
 #![no_std]
 #![warn(missing_docs)]
 #![allow(clippy::precedence)]
