@@ -1,5 +1,13 @@
 //! Analog-to-digital converters.
 
+#[cfg(any(
+  feature = "stm32l4r5",
+  feature = "stm32l4r7",
+  feature = "stm32l4r9",
+  feature = "stm32l4s5",
+  feature = "stm32l4s7",
+  feature = "stm32l4s9"
+))]
 use core::marker::PhantomData;
 #[cfg(any(
   feature = "stm32l4s5",
@@ -8,7 +16,6 @@ use core::marker::PhantomData;
 ))]
 use core::ptr::read_volatile;
 use drone_core::bitfield::Bitfield;
-use drone_core::drv::Resource;
 use drone_cortex_m::fib;
 use drone_cortex_m::reg::marker::*;
 use drone_cortex_m::reg::prelude::*;
@@ -54,8 +61,7 @@ use drone_stm32_map::thr::IntAdc1;
 use futures::prelude::*;
 
 /// ADC driver.
-#[derive(Driver)]
-pub struct Adc<T, C>(T, PhantomData<C>)
+pub struct Adc<T, C>(T, C)
 where
   T: AdcRes,
   C: RegGuardCnt<AdcOn<T>>;
@@ -69,8 +75,7 @@ where
   feature = "stm32l4s9"
 ))]
 /// ADC Common driver.
-#[derive(Driver)]
-pub struct AdcCom<I, C>(AdcComRes<Crt>, PhantomData<(I, C)>)
+pub struct AdcCom<I, C>(AdcComRes, C, PhantomData<I>)
 where
   I: IntAdc1<Att>,
   C: RegGuardCnt<Adc1On<I>>
@@ -80,7 +85,7 @@ where
 
 /// ADC resource.
 #[allow(missing_docs)]
-pub trait AdcRes: Resource + AdcResIsr {
+pub trait AdcRes: Sized + Send + 'static + AdcResIsr {
   type Int: IntToken<Att>;
   type Ier: SRwReg;
   type Cr: SRwReg;
@@ -203,8 +208,8 @@ pub trait AdcResIsr {
 ))]
 /// ADC Common resource.
 #[allow(missing_docs)]
-pub struct AdcComRes<Rt: RegTag> {
-  pub adc_common_ccr: adc_common::Ccr<Rt>,
+pub struct AdcComRes {
+  pub adc_common_ccr: adc_common::Ccr<Crt>,
   pub adc_common_csr: adc_common::Csr<Srt>,
 }
 
@@ -375,6 +380,22 @@ where
   T: AdcRes,
   C: RegGuardCnt<AdcOn<T>>,
 {
+  /// Creates a new `Adc`.
+  ///
+  /// # Safety
+  ///
+  /// `res` must be the only owner of its contained resources.
+  #[inline(always)]
+  pub unsafe fn new(res: T, rgc: C) -> Self {
+    Adc(res, rgc)
+  }
+
+  /// Releases the underlying resources.
+  #[inline(always)]
+  pub fn free(self) -> T {
+    self.0
+  }
+
   /// Enables the clock.
   pub fn on(&self) -> RegGuard<AdcOn<T>, C> {
     RegGuard::new(AdcOn(*self.0.rcc_en()))
@@ -411,26 +432,6 @@ where
       }
       yield;
     }))
-  }
-}
-
-#[cfg(any(
-  feature = "stm32l4r5",
-  feature = "stm32l4r7",
-  feature = "stm32l4r9",
-  feature = "stm32l4s5",
-  feature = "stm32l4s7",
-  feature = "stm32l4s9"
-))]
-impl Resource for AdcComRes<Crt> {
-  type Source = AdcComRes<Srt>;
-
-  #[inline(always)]
-  fn from_source(source: Self::Source) -> Self {
-    Self {
-      adc_common_ccr: source.adc_common_ccr.to_copy(),
-      adc_common_csr: source.adc_common_csr,
-    }
   }
 }
 
@@ -483,6 +484,22 @@ where
     + RegGuardCnt<AdcCh17On<I, C>>
     + RegGuardCnt<AdcVrefOn<I, C>>,
 {
+  /// Creates a new `AdcCom`.
+  ///
+  /// # Safety
+  ///
+  /// `res` must be the only owner of its contained resources.
+  #[inline(always)]
+  pub unsafe fn new(res: AdcComRes, rgc: C) -> Self {
+    AdcCom(res, rgc, PhantomData)
+  }
+
+  /// Releases the underlying resources.
+  #[inline(always)]
+  pub fn free(self) -> AdcComRes {
+    self.0
+  }
+
   /// Enables the V<sub>BAT</sub> channel.
   pub fn ch18_on(
     &self,
@@ -791,13 +808,13 @@ macro_rules! adc {
     $dma_req_id:expr,
   ) => {
     #[doc = $doc]
-    pub type $name<I, C> = Adc<$name_res<I, Crt>, C>;
+    pub type $name<I, C> = Adc<$name_res<I>, C>;
 
     #[doc = $doc_res]
     #[allow(missing_docs)]
-    pub struct $name_res<I: $int_ty<Att>, Rt: RegTag> {
+    pub struct $name_res<I: $int_ty<Att>> {
       pub $int: I,
-      pub $adc_isr: $adc::Isr<Rt>,
+      pub $adc_isr: $adc::Isr<Crt>,
       pub $adc_ier: $adc::Ier<Srt>,
       pub $adc_cr: $adc::Cr<Srt>,
       pub $adc_cfgr: $adc::Cfgr<Srt>,
@@ -825,94 +842,57 @@ macro_rules! adc {
       pub $adc_awd3cr: $adc::Awd3Cr<Srt>,
       pub $adc_difsel: $adc::Difsel<Srt>,
       pub $adc_calfact: $adc::Calfact<Srt>,
-      pub $rcc_ahb_enr_adcen: rcc::$ahb_enr::$adcen_ty<Rt>,
+      pub $rcc_ahb_enr_adcen: rcc::$ahb_enr::$adcen_ty<Crt>,
     }
 
     #[doc = $doc_on]
-    pub type $name_on<I> = AdcOn<$name_res<I, Crt>>;
+    pub type $name_on<I> = AdcOn<$name_res<I>>;
 
     /// Creates a new `Adc`.
     #[macro_export]
     macro_rules! $name_macro {
       ($reg:ident, $thr:ident, $rgc:path) => {
-        <$crate::adc::Adc<_, $rgc> as ::drone_core::drv::Driver>::new(
-          $crate::adc::$name_res {
-            $int: $thr.$int.to_attach(),
-            $adc_isr: $reg.$adc_isr,
-            $adc_ier: $reg.$adc_ier,
-            $adc_cr: $reg.$adc_cr,
-            $adc_cfgr: $reg.$adc_cfgr,
-            $adc_cfgr2: $reg.$adc_cfgr2,
-            $adc_smpr1: $reg.$adc_smpr1,
-            $adc_smpr2: $reg.$adc_smpr2,
-            $adc_tr1: $reg.$adc_tr1,
-            $adc_tr2: $reg.$adc_tr2,
-            $adc_tr3: $reg.$adc_tr3,
-            $adc_sqr1: $reg.$adc_sqr1,
-            $adc_sqr2: $reg.$adc_sqr2,
-            $adc_sqr3: $reg.$adc_sqr3,
-            $adc_sqr4: $reg.$adc_sqr4,
-            $adc_dr: $reg.$adc_dr,
-            $adc_jsqr: $reg.$adc_jsqr,
-            $adc_ofr1: $reg.$adc_ofr1,
-            $adc_ofr2: $reg.$adc_ofr2,
-            $adc_ofr3: $reg.$adc_ofr3,
-            $adc_ofr4: $reg.$adc_ofr4,
-            $adc_jdr1: $reg.$adc_jdr1,
-            $adc_jdr2: $reg.$adc_jdr2,
-            $adc_jdr3: $reg.$adc_jdr3,
-            $adc_jdr4: $reg.$adc_jdr4,
-            $adc_awd2cr: $reg.$adc_awd2cr,
-            $adc_awd3cr: $reg.$adc_awd3cr,
-            $adc_difsel: $reg.$adc_difsel,
-            $adc_calfact: $reg.$adc_calfact,
-            $rcc_ahb_enr_adcen: $reg.$rcc_ahb_enr.$adcen,
-          },
-        )
+        unsafe {
+          $crate::adc::Adc::new(
+            $crate::adc::$name_res {
+              $int: $thr.$int.to_attach(),
+              $adc_isr: $reg.$adc_isr.acquire_copy(),
+              $adc_ier: $reg.$adc_ier,
+              $adc_cr: $reg.$adc_cr,
+              $adc_cfgr: $reg.$adc_cfgr,
+              $adc_cfgr2: $reg.$adc_cfgr2,
+              $adc_smpr1: $reg.$adc_smpr1,
+              $adc_smpr2: $reg.$adc_smpr2,
+              $adc_tr1: $reg.$adc_tr1,
+              $adc_tr2: $reg.$adc_tr2,
+              $adc_tr3: $reg.$adc_tr3,
+              $adc_sqr1: $reg.$adc_sqr1,
+              $adc_sqr2: $reg.$adc_sqr2,
+              $adc_sqr3: $reg.$adc_sqr3,
+              $adc_sqr4: $reg.$adc_sqr4,
+              $adc_dr: $reg.$adc_dr,
+              $adc_jsqr: $reg.$adc_jsqr,
+              $adc_ofr1: $reg.$adc_ofr1,
+              $adc_ofr2: $reg.$adc_ofr2,
+              $adc_ofr3: $reg.$adc_ofr3,
+              $adc_ofr4: $reg.$adc_ofr4,
+              $adc_jdr1: $reg.$adc_jdr1,
+              $adc_jdr2: $reg.$adc_jdr2,
+              $adc_jdr3: $reg.$adc_jdr3,
+              $adc_jdr4: $reg.$adc_jdr4,
+              $adc_awd2cr: $reg.$adc_awd2cr,
+              $adc_awd3cr: $reg.$adc_awd3cr,
+              $adc_difsel: $reg.$adc_difsel,
+              $adc_calfact: $reg.$adc_calfact,
+              $rcc_ahb_enr_adcen: $reg.$rcc_ahb_enr.$adcen.acquire_copy(),
+            },
+            $rgc,
+          )
+        }
       };
     }
 
-    impl<I: $int_ty<Att>> Resource for $name_res<I, Crt> {
-      type Source = $name_res<I, Srt>;
-
-      #[inline(always)]
-      fn from_source(source: Self::Source) -> Self {
-        Self {
-          $int: source.$int,
-          $adc_isr: source.$adc_isr.to_copy(),
-          $adc_ier: source.$adc_ier,
-          $adc_cr: source.$adc_cr,
-          $adc_cfgr: source.$adc_cfgr,
-          $adc_cfgr2: source.$adc_cfgr2,
-          $adc_smpr1: source.$adc_smpr1,
-          $adc_smpr2: source.$adc_smpr2,
-          $adc_tr1: source.$adc_tr1,
-          $adc_tr2: source.$adc_tr2,
-          $adc_tr3: source.$adc_tr3,
-          $adc_sqr1: source.$adc_sqr1,
-          $adc_sqr2: source.$adc_sqr2,
-          $adc_sqr3: source.$adc_sqr3,
-          $adc_sqr4: source.$adc_sqr4,
-          $adc_dr: source.$adc_dr,
-          $adc_jsqr: source.$adc_jsqr,
-          $adc_ofr1: source.$adc_ofr1,
-          $adc_ofr2: source.$adc_ofr2,
-          $adc_ofr3: source.$adc_ofr3,
-          $adc_ofr4: source.$adc_ofr4,
-          $adc_jdr1: source.$adc_jdr1,
-          $adc_jdr2: source.$adc_jdr2,
-          $adc_jdr3: source.$adc_jdr3,
-          $adc_jdr4: source.$adc_jdr4,
-          $adc_awd2cr: source.$adc_awd2cr,
-          $adc_awd3cr: source.$adc_awd3cr,
-          $adc_difsel: source.$adc_difsel,
-          $adc_calfact: source.$adc_calfact,
-          $rcc_ahb_enr_adcen: source.$rcc_ahb_enr_adcen.to_copy(),
-        }
-      }
-    }
-
-    impl<I: $int_ty<Att>> AdcRes for $name_res<I, Crt> {
+    impl<I: $int_ty<Att>> AdcRes for $name_res<I> {
       type Int = I;
       type Ier = $adc::Ier<Srt>;
       type Cr = $adc::Cr<Srt>;
@@ -980,7 +960,7 @@ macro_rules! adc {
       res_impl!(RccAhbEnrAdcEn, rcc_en, $rcc_ahb_enr_adcen);
     }
 
-    impl<I: $int_ty<Att>> AdcResIsr for $name_res<I, Crt> {
+    impl<I: $int_ty<Att>> AdcResIsr for $name_res<I> {
       type Isr = $adc::isr::Reg<Crt>;
       type IsrJqovf = $adc::isr::Jqovf<Crt>;
       type IsrAwd3 = $adc::isr::Awd3<Crt>;
@@ -1016,7 +996,7 @@ macro_rules! adc {
       feature = "stm32l4s7",
       feature = "stm32l4s9"
     ))]
-    impl<I, T> AdcDmaRes<T> for $name_res<I, Crt>
+    impl<I, T> AdcDmaRes<T> for $name_res<I>
     where
       I: $int_ty<Att>,
       T: DmaBond,
@@ -1045,12 +1025,15 @@ macro_rules! adc {
 #[macro_export]
 macro_rules! drv_adc_com {
   ($reg:ident, $rgc:path) => {
-    <$crate::adc::AdcCom<_, $rgc> as ::drone_core::drv::Driver>::new(
-      $crate::adc::AdcComRes {
-        adc_common_ccr: $reg.adc_common_ccr,
-        adc_common_csr: $reg.adc_common_csr,
-      },
-    )
+    unsafe {
+      $crate::adc::AdcCom::new(
+        $crate::adc::AdcComRes {
+          adc_common_ccr: $reg.adc_common_ccr.acquire_copy(),
+          adc_common_csr: $reg.adc_common_csr,
+        },
+        $rgc,
+      )
+    }
   };
 }
 

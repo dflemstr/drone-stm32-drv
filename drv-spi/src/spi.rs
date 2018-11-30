@@ -1,9 +1,7 @@
 //! Serial Peripheral Interface.
 
-use core::marker::PhantomData;
 use core::ptr::{read_volatile, write_volatile};
 use drone_core::bitfield::Bitfield;
-use drone_core::drv::Resource;
 use drone_cortex_m::reg::marker::*;
 use drone_cortex_m::reg::prelude::*;
 use drone_cortex_m::reg::{RegGuard, RegGuardCnt, RegGuardRes};
@@ -125,15 +123,14 @@ pub enum SpiError {
 }
 
 /// SPI driver.
-#[derive(Driver)]
-pub struct Spi<T, C>(T, PhantomData<C>)
+pub struct Spi<T, C>(T, C)
 where
   T: SpiRes,
   C: RegGuardCnt<SpiOn<T>>;
 
 /// SPI resource.
 #[allow(missing_docs)]
-pub trait SpiRes: Resource + SpiResCr1 + SpiResCr2 {
+pub trait SpiRes: Sized + Send + 'static + SpiResCr1 + SpiResCr2 {
   type Int: IntToken<Rtt>;
   type Crcpr: SRwRegBitBand;
   type Dr: CRwRegBitBand;
@@ -429,6 +426,20 @@ where
   T: SpiRes,
   C: RegGuardCnt<SpiOn<T>>,
 {
+  /// Creates a new `Spi`.
+  ///
+  /// # Safety
+  ///
+  /// `res` must be the only owner of its contained resources.
+  pub unsafe fn new(res: T, rgc: C) -> Self {
+    Spi(res, rgc)
+  }
+
+  /// Releases the underlying resources.
+  pub fn free(self) -> T {
+    self.0
+  }
+
   /// Enables the clock.
   pub fn on(&self) -> RegGuard<SpiOn<T>, C> {
     RegGuard::new(SpiOn(*self.0.rcc_en()))
@@ -719,65 +730,49 @@ macro_rules! spi {
     ),
   ) => {
     #[doc = $doc]
-    pub type $name<I, C> = Spi<$name_res<I, Crt>, C>;
+    pub type $name<I, C> = Spi<$name_res<I>, C>;
 
     #[doc = $doc_res]
     #[allow(missing_docs)]
-    pub struct $name_res<I: $int_ty<Rtt>, Rt: RegTag> {
+    pub struct $name_res<I: $int_ty<Rtt>> {
       pub $spi: I,
       pub $spi_cr1: $spi::Cr1<Srt>,
       pub $spi_cr2: $spi::Cr2<Srt>,
       pub $spi_crcpr: $spi::Crcpr<Srt>,
-      pub $spi_dr: $spi::Dr<Rt>,
+      pub $spi_dr: $spi::Dr<Crt>,
       pub $spi_rxcrcr: $spi::Rxcrcr<Srt>,
       pub $spi_sr: $spi::Sr<Srt>,
       pub $spi_txcrcr: $spi::Txcrcr<Srt>,
-      pub $rcc_apb_enr_spien: rcc::$apb_enr::$spien_ty<Rt>,
+      pub $rcc_apb_enr_spien: rcc::$apb_enr::$spien_ty<Crt>,
     }
 
     #[doc = $doc_on]
-    pub type $name_on<I> = SpiOn<$name_res<I, Crt>>;
+    pub type $name_on<I> = SpiOn<$name_res<I>>;
 
     /// Creates a new `Spi`.
     #[macro_export]
     macro_rules! $name_macro {
       ($reg:ident, $thr:ident, $rgc:path) => {
-        <$crate::spi::Spi<_, $rgc> as ::drone_core::drv::Driver>::new(
-          $crate::spi::$name_res {
-            $spi: $thr.$spi.to_regular(),
-            $spi_cr1: $reg.$spi_cr1,
-            $spi_cr2: $reg.$spi_cr2,
-            $spi_crcpr: $reg.$spi_crcpr,
-            $spi_dr: $reg.$spi_dr,
-            $spi_rxcrcr: $reg.$spi_rxcrcr,
-            $spi_sr: $reg.$spi_sr,
-            $spi_txcrcr: $reg.$spi_txcrcr,
-            $rcc_apb_enr_spien: $reg.$rcc_apb_enr.$spien,
-          },
-        )
+        unsafe {
+          $crate::spi::Spi::new(
+            $crate::spi::$name_res {
+              $spi: $thr.$spi.to_regular(),
+              $spi_cr1: $reg.$spi_cr1,
+              $spi_cr2: $reg.$spi_cr2,
+              $spi_crcpr: $reg.$spi_crcpr,
+              $spi_dr: $reg.$spi_dr.acquire_copy(),
+              $spi_rxcrcr: $reg.$spi_rxcrcr,
+              $spi_sr: $reg.$spi_sr,
+              $spi_txcrcr: $reg.$spi_txcrcr,
+              $rcc_apb_enr_spien: $reg.$rcc_apb_enr.$spien.acquire_copy(),
+            },
+            $rgc,
+          )
+        }
       };
     }
 
-    impl<I: $int_ty<Rtt>> Resource for $name_res<I, Crt> {
-      type Source = $name_res<I, Srt>;
-
-      #[inline(always)]
-      fn from_source(source: Self::Source) -> Self {
-        Self {
-          $spi: source.$spi,
-          $spi_cr1: source.$spi_cr1,
-          $spi_cr2: source.$spi_cr2,
-          $spi_crcpr: source.$spi_crcpr,
-          $spi_dr: source.$spi_dr.to_copy(),
-          $spi_rxcrcr: source.$spi_rxcrcr,
-          $spi_sr: source.$spi_sr,
-          $spi_txcrcr: source.$spi_txcrcr,
-          $rcc_apb_enr_spien: source.$rcc_apb_enr_spien.to_copy(),
-        }
-      }
-    }
-
-    impl<I: $int_ty<Rtt>> SpiRes for $name_res<I, Crt> {
+    impl<I: $int_ty<Rtt>> SpiRes for $name_res<I> {
       type Int = I;
       type Crcpr = $spi::Crcpr<Srt>;
       type Dr = $spi::Dr<Crt>;
@@ -812,7 +807,7 @@ macro_rules! spi {
       res_impl!(RccApbEnrSpiEn, rcc_en, $rcc_apb_enr_spien);
     }
 
-    impl<I: $int_ty<Rtt>> SpiResCr1 for $name_res<I, Crt> {
+    impl<I: $int_ty<Rtt>> SpiResCr1 for $name_res<I> {
       type Cr1Val = $spi::cr1::Val;
       type Cr1 = $spi::Cr1<Srt>;
       type Cr1Bidimode = $spi::cr1::Bidimode<Srt>;
@@ -835,7 +830,7 @@ macro_rules! spi {
       res_impl!(Cr1Cpha, cr1_cpha, $spi_cr1.cpha);
     }
 
-    impl<I: $int_ty<Rtt>> SpiResCr2 for $name_res<I, Crt> {
+    impl<I: $int_ty<Rtt>> SpiResCr2 for $name_res<I> {
       type Cr2Val = $spi::cr2::Val;
       type Cr2 = $spi::Cr2<Srt>;
       type Cr2Txeie = $spi::cr2::Txeie<Srt>;
@@ -879,7 +874,7 @@ macro_rules! spi {
       feature = "stm32l4s7",
       feature = "stm32l4s9"
     ))]
-    impl<I, T> SpiDmaRxRes<T> for $name_res<I, Crt>
+    impl<I, T> SpiDmaRxRes<T> for $name_res<I>
     where
       T: DmaBond,
       I: $int_ty<Rtt>,
@@ -904,7 +899,7 @@ macro_rules! spi {
         feature = "stm32l4s9"
       )))]
       $(#[$dma_rx_attr])*
-      impl<I, Rx, C> SpiDmaRxRes<$dma_rx_bond<Rx, C>> for $name_res<I, Crt>
+      impl<I, Rx, C> SpiDmaRxRes<$dma_rx_bond<Rx, C>> for $name_res<I>
       where
         Rx: $int_dma_rx<Rtt>,
         I: $int_ty<Rtt>,
@@ -937,7 +932,7 @@ macro_rules! spi {
       feature = "stm32l4s7",
       feature = "stm32l4s9"
     ))]
-    impl<I, T> SpiDmaTxRes<T> for $name_res<I, Crt>
+    impl<I, T> SpiDmaTxRes<T> for $name_res<I>
     where
       T: DmaBond,
       I: $int_ty<Rtt>,
@@ -962,7 +957,7 @@ macro_rules! spi {
         feature = "stm32l4s9"
       )))]
       $(#[$dma_tx_attr])*
-      impl<I, Tx, C> SpiDmaTxRes<$dma_tx_bond<Tx, C>> for $name_res<I, Crt>
+      impl<I, Tx, C> SpiDmaTxRes<$dma_tx_bond<Tx, C>> for $name_res<I>
       where
         Tx: $int_dma_tx<Rtt>,
         I: $int_ty<Rtt>,

@@ -1,20 +1,17 @@
 //! DMA request multiplexer.
 
-use core::marker::PhantomData;
 use drone_core::bitfield::Bitfield;
-use drone_core::drv::Resource;
 use drone_cortex_m::reg::marker::*;
 use drone_cortex_m::reg::prelude::*;
 use drone_cortex_m::reg::{RegGuard, RegGuardCnt, RegGuardRes};
 use drone_stm32_map::reg::{dmamux1, rcc};
 
 /// DMAMUX channel driver.
-#[derive(Driver)]
 pub struct DmamuxCh<T: DmamuxChRes>(T);
 
 /// DMAMUX channel resource.
 #[allow(missing_docs)]
-pub trait DmamuxChRes: Resource {
+pub trait DmamuxChRes: Sized + Send + 'static {
   type RccRes: DmamuxRccRes;
   type CrVal: Bitfield<Bits = u32>;
   type Cr: SRwReg<Val = Self::CrVal>;
@@ -43,12 +40,11 @@ pub trait DmamuxChRes: Resource {
 }
 
 /// DMAMUX request generator driver.
-#[derive(Driver)]
 pub struct DmamuxRg<T: DmamuxRgRes>(T);
 
 /// DMAMUX request generator resource.
 #[allow(missing_docs)]
-pub trait DmamuxRgRes: Resource {
+pub trait DmamuxRgRes: Sized + Send + 'static {
   type RccRes: DmamuxRccRes;
   type CrVal: Bitfield<Bits = u32>;
   type Cr: SRwReg<Val = Self::CrVal>;
@@ -73,15 +69,14 @@ pub trait DmamuxRgRes: Resource {
 }
 
 /// DMAMUX reset and clock control driver.
-#[derive(Driver)]
-pub struct DmamuxRcc<T, C>(T, PhantomData<C>)
+pub struct DmamuxRcc<T, C>(T, C)
 where
   T: DmamuxRccRes,
   C: RegGuardCnt<DmamuxOn<T>>;
 
 /// DMAMUX reset and clock control resource.
 #[allow(missing_docs)]
-pub trait DmamuxRccRes: Resource {
+pub trait DmamuxRccRes: Sized + Send + 'static {
   type RccAhb1EnrVal: Bitfield<Bits = u32>;
   type RccAhb1Enr: CRwRegBitBand<Val = Self::RccAhb1EnrVal>;
   type RccAhb1EnrDmamuxEn: CRwRwRegFieldBitBand<Reg = Self::RccAhb1Enr>;
@@ -145,6 +140,20 @@ impl<T: DmamuxChRes> DmamuxCh<T> {
   }
 }
 
+impl<T: DmamuxChRes> DmamuxCh<T> {
+  /// Creates a new `DmamuxCh`.
+  #[inline(always)]
+  pub fn new(res: T) -> Self {
+    DmamuxCh(res)
+  }
+
+  /// Releases the underlying resources.
+  #[inline(always)]
+  pub fn free(self) -> T {
+    self.0
+  }
+}
+
 #[allow(missing_docs)]
 impl<T: DmamuxRgRes> DmamuxRg<T> {
   #[inline(always)]
@@ -188,11 +197,41 @@ impl<T: DmamuxRgRes> DmamuxRg<T> {
   }
 }
 
+impl<T: DmamuxRgRes> DmamuxRg<T> {
+  /// Creates a new `DmamuxRg`.
+  #[inline(always)]
+  pub fn new(res: T) -> Self {
+    DmamuxRg(res)
+  }
+
+  /// Releases the underlying resources.
+  #[inline(always)]
+  pub fn free(self) -> T {
+    self.0
+  }
+}
+
 impl<T, C> DmamuxRcc<T, C>
 where
   T: DmamuxRccRes,
   C: RegGuardCnt<DmamuxOn<T>>,
 {
+  /// Creates a new `DmamuxRcc`.
+  ///
+  /// # Safety
+  ///
+  /// `res` must be the only owner of its contained resources.
+  #[inline(always)]
+  pub unsafe fn new(res: T, rgc: C) -> Self {
+    DmamuxRcc(res, rgc)
+  }
+
+  /// Releases the underlying resources.
+  #[inline(always)]
+  pub fn free(self) -> T {
+    self.0
+  }
+
   /// Enables the clock.
   pub fn on(&self) -> RegGuard<DmamuxOn<T>, C> {
     RegGuard::new(DmamuxOn(*self.0.en()))
@@ -285,23 +324,15 @@ macro_rules! dmamux {
     #[macro_export]
     macro_rules! $name_macro {
       ($reg:ident, $rgc:path) => {
-        <$crate::dmamux::DmamuxRcc<_, $rgc> as ::drone_core::drv::Driver>::new(
-          $crate::dmamux::$name_res {
-            $rcc_ahb1enr_dmamuxen: $reg.rcc_ahb1enr.$dmamuxen,
-          },
-        )
-      };
-    }
-
-    impl Resource for $name_res<Crt> {
-      type Source = $name_res<Srt>;
-
-      #[inline(always)]
-      fn from_source(source: Self::Source) -> Self {
-        Self {
-          $rcc_ahb1enr_dmamuxen: source.$rcc_ahb1enr_dmamuxen.to_copy(),
+        unsafe {
+          $crate::dmamux::DmamuxRcc::new(
+            $crate::dmamux::$name_res {
+              $rcc_ahb1enr_dmamuxen: $reg.rcc_ahb1enr.$dmamuxen.acquire_copy(),
+            },
+            $rgc,
+          )
         }
-      }
+      };
     }
 
     impl DmamuxRccRes for $name_res<Crt> {
@@ -318,7 +349,6 @@ macro_rules! dmamux {
 
       #[doc = $doc_ch_res]
       #[allow(missing_docs)]
-      #[derive(Resource)]
       pub struct $name_ch_res {
         pub $dmamux_chcr: dmamux1::$chcr::Reg<Srt>,
         pub $dmamux_csr_sof: dmamux1::csr::$sof_ty<Srt>,
@@ -329,13 +359,11 @@ macro_rules! dmamux {
       #[macro_export]
       macro_rules! $name_ch_macro {
         ($reg: ident) => {
-          <$crate::dmamux::DmamuxCh<_> as ::drone_core::drv::Driver>::new(
-            $crate::dmamux::$name_ch_res {
-              $dmamux_chcr: $reg.$dmamux_chcr,
-              $dmamux_csr_sof: $reg.dmamux1_csr.$sof,
-              $dmamux_cfr_csof: $reg.dmamux1_cfr.$csof,
-            },
-          )
+          $crate::dmamux::DmamuxCh::new($crate::dmamux::$name_ch_res {
+            $dmamux_chcr: $reg.$dmamux_chcr,
+            $dmamux_csr_sof: $reg.dmamux1_csr.$sof,
+            $dmamux_cfr_csof: $reg.dmamux1_cfr.$csof,
+          })
         };
       }
 
@@ -374,7 +402,6 @@ macro_rules! dmamux {
 
       #[doc = $doc_rg_res]
       #[allow(missing_docs)]
-      #[derive(Resource)]
       pub struct $name_rg_res {
         pub $dmamux_rgcr: dmamux1::$rgcr::Reg<Srt>,
         pub $dmamux_rgsr_of: dmamux1::rgsr::$of_ty<Srt>,
@@ -385,13 +412,11 @@ macro_rules! dmamux {
       #[macro_export]
       macro_rules! $name_rg_macro {
         ($reg: ident) => {
-          <$crate::dmamux::DmamuxRg<_> as ::drone_core::drv::Driver>::new(
-            $crate::dmamux::$name_rg_res {
-              $dmamux_rgcr: $reg.$dmamux_rgcr,
-              $dmamux_rgsr_of: $reg.dmamux1_rgsr.$of,
-              $dmamux_rgcfr_cof: $reg.dmamux1_rgcfr.$cof,
-            },
-          )
+          $crate::dmamux::DmamuxRg::new($crate::dmamux::$name_rg_res {
+            $dmamux_rgcr: $reg.$dmamux_rgcr,
+            $dmamux_rgsr_of: $reg.dmamux1_rgsr.$of,
+            $dmamux_rgcfr_cof: $reg.dmamux1_rgcfr.$cof,
+          })
         };
       }
 

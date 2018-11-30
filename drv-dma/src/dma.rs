@@ -1,6 +1,5 @@
 //! Direct memory access controller.
 
-use core::marker::PhantomData;
 #[cfg(any(
   feature = "stm32l4r5",
   feature = "stm32l4r7",
@@ -16,7 +15,6 @@ use dmamux::{
   DmamuxCh, DmamuxChRes, DmamuxOn,
 };
 use drone_core::bitfield::Bitfield;
-use drone_core::drv::Resource;
 use drone_cortex_m::fib;
 use drone_cortex_m::reg::marker::*;
 use drone_cortex_m::reg::prelude::*;
@@ -107,12 +105,15 @@ use futures::prelude::*;
 pub struct DmaTransferError;
 
 /// DMA driver.
-#[derive(Driver)]
 pub struct Dma<T: DmaRes>(T);
 
 /// DMA resource.
 #[allow(missing_docs)]
-pub trait DmaRes: Resource + DmaResCcr + DmaResIfcr + DmaResIsr {
+pub trait DmaRes
+where
+  Self: Sized + Send + 'static,
+  Self: DmaResCcr + DmaResIfcr + DmaResIsr,
+{
   type RccRes: DmaRccRes;
   type Int: IntToken<Rtt>;
   type CmarVal: Bitfield<Bits = u32>;
@@ -228,15 +229,14 @@ pub trait DmaResIsr {
 }
 
 /// DMA reset and clock control driver.
-#[derive(Driver)]
-pub struct DmaRcc<T, C>(T, PhantomData<C>)
+pub struct DmaRcc<T, C>(T, C)
 where
   T: DmaRccRes,
   C: RegGuardCnt<DmaOn<T>>;
 
 /// DMA reset and clock control resource.
 #[allow(missing_docs)]
-pub trait DmaRccRes: Resource {
+pub trait DmaRccRes: Sized + Send + 'static {
   type RccAhb1EnrVal: Bitfield<Bits = u32>;
   type RccAhb1Enr: CRwRegBitBand<Val = Self::RccAhb1EnrVal>;
   type RccAhb1EnrDmaEn: CRwRwRegFieldBitBand<Reg = Self::RccAhb1Enr>;
@@ -520,6 +520,22 @@ impl<T: DmaRes> Dma<T> {
 }
 
 impl<T: DmaRes> Dma<T> {
+  /// Creates a new `Dma`.
+  ///
+  /// # Safety
+  ///
+  /// `res` must be the only owner of its contained resources.
+  #[inline(always)]
+  pub unsafe fn new(res: T) -> Self {
+    Dma(res)
+  }
+
+  /// Releases the underlying resources.
+  #[inline(always)]
+  pub fn free(self) -> T {
+    self.0
+  }
+
   /// Returns a number of data to transfer.
   #[inline]
   pub fn size(&self) -> usize {
@@ -614,6 +630,22 @@ where
   T: DmaRccRes,
   C: RegGuardCnt<DmaOn<T>>,
 {
+  /// Creates a new `DmaRcc`.
+  ///
+  /// # Safety
+  ///
+  /// `res` must be the only owner of its contained resources.
+  #[inline(always)]
+  pub unsafe fn new(res: T, rgc: C) -> Self {
+    DmaRcc(res, rgc)
+  }
+
+  /// Releases the underlying resources.
+  #[inline(always)]
+  pub fn free(self) -> T {
+    self.0
+  }
+
   /// Enables the clock.
   pub fn on(&self) -> RegGuard<DmaOn<T>, C> {
     RegGuard::new(DmaOn(*self.0.en()))
@@ -738,23 +770,15 @@ macro_rules! dma {
     #[macro_export]
     macro_rules! $name_macro {
       ($reg:ident, $rgc:path) => {
-        <$crate::dma::DmaRcc<_, $rgc> as ::drone_core::drv::Driver>::new(
-          $crate::dma::$name_res {
-            $rcc_ahb1enr_dmaen: $reg.rcc_ahb1enr.$dmaen,
-          },
-        )
-      };
-    }
-
-    impl Resource for $name_res<Crt> {
-      type Source = $name_res<Srt>;
-
-      #[inline(always)]
-      fn from_source(source: Self::Source) -> Self {
-        Self {
-          $rcc_ahb1enr_dmaen: source.$rcc_ahb1enr_dmaen.to_copy(),
+        unsafe {
+          $crate::dma::DmaRcc::new(
+            $crate::dma::$name_res {
+              $rcc_ahb1enr_dmaen: $reg.rcc_ahb1enr.$dmaen.acquire_copy(),
+            },
+            $rgc,
+          )
         }
-      }
+      };
     }
 
     impl DmaRccRes for $name_res<Crt> {
@@ -768,12 +792,12 @@ macro_rules! dma {
     $(
       $(#[$attr_ch])*
       #[doc = $doc_ch]
-      pub type $name_ch<I> = Dma<$name_ch_res<I, Crt>>;
+      pub type $name_ch<I> = Dma<$name_ch_res<I>>;
 
       $(#[$attr_ch])*
       #[doc = $doc_ch_res]
       #[allow(missing_docs)]
-      pub struct $name_ch_res<I: $int_ty<Rtt>, Rt: RegTag> {
+      pub struct $name_ch_res<I: $int_ty<Rtt>> {
         pub $dma_ch: I,
         pub $dma_ccr: $dma::$ccr_ty<Srt>,
         pub $dma_cmar: $dma::$cmar_ty<Srt>,
@@ -787,14 +811,14 @@ macro_rules! dma {
           feature = "stm32l4x6"
         ))]
         pub $dma_cselr_cs: $dma::cselr::$cs_ty<Srt>,
-        pub $dma_ifcr_cgif: $dma::ifcr::$cgif_ty<Rt>,
-        pub $dma_ifcr_chtif: $dma::ifcr::$chtif_ty<Rt>,
-        pub $dma_ifcr_ctcif: $dma::ifcr::$ctcif_ty<Rt>,
-        pub $dma_ifcr_cteif: $dma::ifcr::$cteif_ty<Rt>,
-        pub $dma_isr_gif: $dma::isr::$gif_ty<Rt>,
-        pub $dma_isr_htif: $dma::isr::$htif_ty<Rt>,
-        pub $dma_isr_tcif: $dma::isr::$tcif_ty<Rt>,
-        pub $dma_isr_teif: $dma::isr::$teif_ty<Rt>,
+        pub $dma_ifcr_cgif: $dma::ifcr::$cgif_ty<Crt>,
+        pub $dma_ifcr_chtif: $dma::ifcr::$chtif_ty<Crt>,
+        pub $dma_ifcr_ctcif: $dma::ifcr::$ctcif_ty<Crt>,
+        pub $dma_ifcr_cteif: $dma::ifcr::$cteif_ty<Crt>,
+        pub $dma_isr_gif: $dma::isr::$gif_ty<Crt>,
+        pub $dma_isr_htif: $dma::isr::$htif_ty<Crt>,
+        pub $dma_isr_tcif: $dma::isr::$tcif_ty<Crt>,
+        pub $dma_isr_teif: $dma::isr::$teif_ty<Crt>,
       }
 
       $(#[$attr_ch])*
@@ -803,7 +827,7 @@ macro_rules! dma {
       pub struct $name_ch_bond<I, C>
       where
         I: $int_ty<Rtt>,
-        C: DmaBondOnRgc<$name_ch_res<I, Crt>>,
+        C: DmaBondOnRgc<$name_ch_res<I>>,
       {
         pub $dma_ch: $name_ch<I>,
         pub $dma_on: RegGuard<$name_on, C>,
@@ -842,24 +866,24 @@ macro_rules! dma {
       #[macro_export]
       macro_rules! $name_ch_macro {
         ($reg: ident, $thr: ident) => {
-          <$crate::dma::Dma<_> as ::drone_core::drv::Driver>::new(
-            $crate::dma::$name_ch_res {
+          unsafe {
+            $crate::dma::Dma::new($crate::dma::$name_ch_res {
               $dma_ch: $thr.$dma_ch.to_regular(),
               $dma_ccr: $reg.$dma_ccr,
               $dma_cmar: $reg.$dma_cmar,
               $dma_cndtr: $reg.$dma_cndtr,
               $dma_cpar: $reg.$dma_cpar,
               $dma_cselr_cs: $reg.$dma_cselr.$cs,
-              $dma_ifcr_cgif: $reg.$dma_ifcr.$cgif,
-              $dma_ifcr_chtif: $reg.$dma_ifcr.$chtif,
-              $dma_ifcr_ctcif: $reg.$dma_ifcr.$ctcif,
-              $dma_ifcr_cteif: $reg.$dma_ifcr.$cteif,
-              $dma_isr_gif: $reg.$dma_isr.$gif,
-              $dma_isr_htif: $reg.$dma_isr.$htif,
-              $dma_isr_tcif: $reg.$dma_isr.$tcif,
-              $dma_isr_teif: $reg.$dma_isr.$teif,
-            },
-          )
+              $dma_ifcr_cgif: $reg.$dma_ifcr.$cgif.acquire_copy(),
+              $dma_ifcr_chtif: $reg.$dma_ifcr.$chtif.acquire_copy(),
+              $dma_ifcr_ctcif: $reg.$dma_ifcr.$ctcif.acquire_copy(),
+              $dma_ifcr_cteif: $reg.$dma_ifcr.$cteif.acquire_copy(),
+              $dma_isr_gif: $reg.$dma_isr.$gif.acquire_copy(),
+              $dma_isr_htif: $reg.$dma_isr.$htif.acquire_copy(),
+              $dma_isr_tcif: $reg.$dma_isr.$tcif.acquire_copy(),
+              $dma_isr_teif: $reg.$dma_isr.$teif.acquire_copy(),
+            })
+          }
         };
       }
 
@@ -875,60 +899,28 @@ macro_rules! dma {
       #[macro_export]
       macro_rules! $name_ch_macro {
         ($reg: ident, $thr: ident) => {
-          <$crate::dma::Dma<_> as ::drone_core::drv::Driver>::new(
-            $crate::dma::$name_ch_res {
+          unsafe {
+            $crate::dma::Dma::new($crate::dma::$name_ch_res {
               $dma_ch: $thr.$dma_ch.to_regular(),
               $dma_ccr: $reg.$dma_ccr,
               $dma_cmar: $reg.$dma_cmar,
               $dma_cndtr: $reg.$dma_cndtr,
               $dma_cpar: $reg.$dma_cpar,
-              $dma_ifcr_cgif: $reg.$dma_ifcr.$cgif,
-              $dma_ifcr_chtif: $reg.$dma_ifcr.$chtif,
-              $dma_ifcr_ctcif: $reg.$dma_ifcr.$ctcif,
-              $dma_ifcr_cteif: $reg.$dma_ifcr.$cteif,
-              $dma_isr_gif: $reg.$dma_isr.$gif,
-              $dma_isr_htif: $reg.$dma_isr.$htif,
-              $dma_isr_tcif: $reg.$dma_isr.$tcif,
-              $dma_isr_teif: $reg.$dma_isr.$teif,
-            },
-          )
+              $dma_ifcr_cgif: $reg.$dma_ifcr.$cgif.acquire_copy(),
+              $dma_ifcr_chtif: $reg.$dma_ifcr.$chtif.acquire_copy(),
+              $dma_ifcr_ctcif: $reg.$dma_ifcr.$ctcif.acquire_copy(),
+              $dma_ifcr_cteif: $reg.$dma_ifcr.$cteif.acquire_copy(),
+              $dma_isr_gif: $reg.$dma_isr.$gif.acquire_copy(),
+              $dma_isr_htif: $reg.$dma_isr.$htif.acquire_copy(),
+              $dma_isr_tcif: $reg.$dma_isr.$tcif.acquire_copy(),
+              $dma_isr_teif: $reg.$dma_isr.$teif.acquire_copy(),
+            })
+          }
         };
       }
 
       $(#[$attr_ch])*
-      impl<I: $int_ty<Rtt>> Resource for $name_ch_res<I, Crt> {
-        type Source = $name_ch_res<I, Srt>;
-
-        #[inline(always)]
-        fn from_source(source: Self::Source) -> Self {
-          Self {
-            $dma_ch: source.$dma_ch,
-            $dma_ccr: source.$dma_ccr,
-            $dma_cmar: source.$dma_cmar,
-            $dma_cndtr: source.$dma_cndtr,
-            $dma_cpar: source.$dma_cpar,
-            #[cfg(any(
-              feature = "stm32l4x1",
-              feature = "stm32l4x2",
-              feature = "stm32l4x3",
-              feature = "stm32l4x5",
-              feature = "stm32l4x6"
-            ))]
-            $dma_cselr_cs: source.$dma_cselr_cs,
-            $dma_ifcr_cgif: source.$dma_ifcr_cgif.to_copy(),
-            $dma_ifcr_chtif: source.$dma_ifcr_chtif.to_copy(),
-            $dma_ifcr_ctcif: source.$dma_ifcr_ctcif.to_copy(),
-            $dma_ifcr_cteif: source.$dma_ifcr_cteif.to_copy(),
-            $dma_isr_gif: source.$dma_isr_gif.to_copy(),
-            $dma_isr_htif: source.$dma_isr_htif.to_copy(),
-            $dma_isr_tcif: source.$dma_isr_tcif.to_copy(),
-            $dma_isr_teif: source.$dma_isr_teif.to_copy(),
-          }
-        }
-      }
-
-      $(#[$attr_ch])*
-      impl<I: $int_ty<Rtt>> DmaRes for $name_ch_res<I, Crt> {
+      impl<I: $int_ty<Rtt>> DmaRes for $name_ch_res<I> {
         type RccRes = $name_res<Crt>;
         type Int = I;
         type CmarVal = $dma::$cmar_path::Val;
@@ -989,7 +981,7 @@ macro_rules! dma {
       }
 
       $(#[$attr_ch])*
-      impl<I: $int_ty<Rtt>> DmaResCcr for $name_ch_res<I, Crt> {
+      impl<I: $int_ty<Rtt>> DmaResCcr for $name_ch_res<I> {
         type CcrVal = $dma::$ccr_path::Val;
         type Ccr = $dma::$ccr_ty<Srt>;
         type CcrMem2Mem = $dma::$ccr_path::Mem2Mem<Srt>;
@@ -1019,7 +1011,7 @@ macro_rules! dma {
       }
 
       $(#[$attr_ch])*
-      impl<I: $int_ty<Rtt>> DmaResIfcr for $name_ch_res<I, Crt> {
+      impl<I: $int_ty<Rtt>> DmaResIfcr for $name_ch_res<I> {
         type Ifcr = $dma::Ifcr<Crt>;
         type IfcrCgif = $dma::ifcr::$cgif_ty<Crt>;
         type IfcrChtif = $dma::ifcr::$chtif_ty<Crt>;
@@ -1033,7 +1025,7 @@ macro_rules! dma {
       }
 
       $(#[$attr_ch])*
-      impl<I: $int_ty<Rtt>> DmaResIsr for $name_ch_res<I, Crt> {
+      impl<I: $int_ty<Rtt>> DmaResIsr for $name_ch_res<I> {
         type Isr = $dma::Isr<Crt>;
         type IsrGif = $dma::isr::$gif_ty<Crt>;
         type IsrHtif = $dma::isr::$htif_ty<Crt>;
@@ -1049,11 +1041,11 @@ macro_rules! dma {
       impl<I, C> DmaBond for $name_ch_bond<I, C>
       where
         I: $int_ty<Rtt>,
-        C: DmaBondOnRgc<$name_ch_res<I, Crt>>,
+        C: DmaBondOnRgc<$name_ch_res<I>>,
       {
         type Rgc = C;
 
-        type DmaRes = $name_ch_res<I, Crt>;
+        type DmaRes = $name_ch_res<I>;
 
         #[cfg(any(
           feature = "stm32l4r5",

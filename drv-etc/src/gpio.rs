@@ -1,8 +1,6 @@
 //! General-purpose I/O.
 
-use core::marker::PhantomData;
 use drone_core::bitfield::Bitfield;
-use drone_core::drv::Resource;
 use drone_cortex_m::reg::marker::*;
 use drone_cortex_m::reg::prelude::*;
 use drone_cortex_m::reg::{RegGuard, RegGuardCnt, RegGuardRes};
@@ -690,15 +688,14 @@ pub trait GpioPinAscr<T: RegTag>: GpioPin<T> {
 }
 
 /// GPIO port reset and clock control driver.
-#[derive(Driver)]
-pub struct GpioRcc<T, C>(T, PhantomData<C>)
+pub struct GpioRcc<T, C>(T, C)
 where
   T: GpioRccRes,
   C: RegGuardCnt<GpioOn<T>>;
 
 /// GPIO port reset and clock control resource.
 #[allow(missing_docs)]
-pub trait GpioRccRes: Resource {
+pub trait GpioRccRes: Sized + Send + 'static {
   type RccAhb2EnrVal: Bitfield<Bits = u32>;
   type RccAhb2Enr: CRwRegBitBand<Val = Self::RccAhb2EnrVal>;
   type RccAhb2EnrGpioen: CRwRwRegFieldBitBand<Reg = Self::RccAhb2Enr>;
@@ -711,6 +708,22 @@ where
   T: GpioRccRes,
   C: RegGuardCnt<GpioOn<T>>,
 {
+  /// Creates a new `GpioRcc`.
+  ///
+  /// # Safety
+  ///
+  /// `res` must be the only owner of its contained resources.
+  #[inline(always)]
+  pub unsafe fn new(res: T, rgc: C) -> Self {
+    GpioRcc(res, rgc)
+  }
+
+  /// Releases the underlying resources.
+  #[inline(always)]
+  pub fn free(self) -> T {
+    self.0
+  }
+
   /// Enables the port clock.
   pub fn on(&self) -> RegGuard<GpioOn<T>, C> {
     RegGuard::new(GpioOn(*self.0.en()))
@@ -1073,11 +1086,14 @@ macro_rules! gpio_port {
     #[macro_export]
     macro_rules! $name_rcc_macro {
       ($reg:ident, $rgc:path) => {
-        <$crate::gpio::GpioRcc<_, $rgc> as ::drone_core::drv::Driver>::new(
-          $crate::gpio::$name_rcc_res {
-            $rcc_ahb2enr_gpioen: $reg.rcc_ahb2enr.$gpioen,
-          },
-        )
+        unsafe {
+          $crate::gpio::GpioRcc::new(
+            $crate::gpio::$name_rcc_res {
+              $rcc_ahb2enr_gpioen: $reg.rcc_ahb2enr.$gpioen.acquire_copy(),
+            },
+            $rgc,
+          )
+        }
       };
     }
 
@@ -1615,17 +1631,6 @@ macro_rules! gpio_port {
       type Ascr = $gpio::ascr::Reg<T>;
 
       res_impl!(Ascr, ascr, ascr_mut, $gpio_ascr);
-    }
-
-    impl Resource for $name_rcc_res<Crt> {
-      type Source = $name_rcc_res<Srt>;
-
-      #[inline(always)]
-      fn from_source(source: Self::Source) -> Self {
-        Self {
-          $rcc_ahb2enr_gpioen: source.$rcc_ahb2enr_gpioen.to_copy(),
-        }
-      }
     }
 
     impl GpioRccRes for $name_rcc_res<Crt> {

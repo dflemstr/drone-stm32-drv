@@ -4,12 +4,10 @@ use drone_cortex_m::reg::prelude::*;
 use drone_stm32_map::reg::{rcc, rtc};
 
 /// Real-time clock driver.
-#[derive(Driver)]
 pub struct Rtc(RtcRes);
 
 /// Real-time clock resource.
 #[allow(missing_docs)]
-#[derive(Resource)]
 pub struct RtcRes {
   pub rcc_bdcr_rtcen: rcc::bdcr::Rtcen<Srt>,
   pub rcc_bdcr_rtcsel: rcc::bdcr::Rtcsel<Srt>,
@@ -40,7 +38,7 @@ pub struct RtcRes {
 #[macro_export]
 macro_rules! drv_rtc {
   ($reg:ident) => {
-    <$crate::rtc::Rtc as ::drone_core::drv::Driver>::new($crate::rtc::RtcRes {
+    $crate::rtc::Rtc::new($crate::rtc::RtcRes {
       rcc_bdcr_rtcen: $reg.rcc_bdcr.rtcen,
       rcc_bdcr_rtcsel: $reg.rcc_bdcr.rtcsel,
       rtc_tr: $reg.rtc_tr,
@@ -187,6 +185,18 @@ impl Rtc {
 }
 
 impl Rtc {
+  /// Creates a new `Rtc`.
+  #[inline(always)]
+  pub fn new(res: RtcRes) -> Self {
+    Rtc(res)
+  }
+
+  /// Releases the underlying resources.
+  #[inline(always)]
+  pub fn free(self) -> RtcRes {
+    self.0
+  }
+
   /// Disables the write protection.
   pub fn unlock(&self) {
     self.0.rtc_wpr.store(|r| r.write_key(0xCA));

@@ -1,6 +1,5 @@
 //! Extended interrupts and events controller.
 
-use drone_core::drv::Resource;
 use drone_cortex_m::fib::{self, Fiber};
 use drone_cortex_m::reg::marker::*;
 use drone_cortex_m::reg::prelude::*;
@@ -75,12 +74,11 @@ use futures::prelude::*;
 pub struct ExtiLnOverflow;
 
 /// EXTI line driver.
-#[derive(Driver)]
 pub struct ExtiLn<T: ExtiLnRes>(T);
 
 /// EXTI line resource.
 #[allow(missing_docs)]
-pub trait ExtiLnRes: Resource {
+pub trait ExtiLnRes: Sized + Send + 'static {
   type Emr: SRwRegBitBand;
   type EmrMr: SRwRwRegFieldBitBand<Reg = Self::Emr>;
   type Imr: SRwRegBitBand;
@@ -169,6 +167,24 @@ impl<T: ExtiLnExtRes> ExtiLn<T> {
   }
 }
 
+impl<T: ExtiLnRes> ExtiLn<T> {
+  /// Creates a new `ExtiLn`.
+  ///
+  /// # Safety
+  ///
+  /// `res` must be the only owner of its contained resources.
+  #[inline(always)]
+  pub unsafe fn new(res: T) -> Self {
+    ExtiLn(res)
+  }
+
+  /// Releases the underlying resources.
+  #[inline(always)]
+  pub fn free(self) -> T {
+    self.0
+  }
+}
+
 impl<T: ExtiLnExtRes + ExtiLnConfRes> ExtiLn<T> {
   /// Returns a future, which resolves to `Ok(())` when the event is triggered.
   pub fn add_future(&self) -> impl Future<Item = (), Error = !> {
@@ -236,7 +252,6 @@ macro_rules! exti_line {
     $mr:ident,
     ($((
       $i_tp:ident: $int_ty:ident,
-      ($($crt_i:ident)*),
       $exti_ty:ident,
       $int:ident,
       $($exticr_path:ident)::*,
@@ -246,7 +261,6 @@ macro_rules! exti_line {
     ))*),
     ($((
       ($($i_tp_c:ident: $int_ty_c:ident)*),
-      $rt_tp:ident: $srt:ident $crt:ident,
       $ft_ty:ident,
       $pif_ty:ident,
       $rt_ty:ident,
@@ -270,18 +284,18 @@ macro_rules! exti_line {
     ))*),
   ) => {
     #[doc = $doc]
-    pub type $name<$($i_tp,)*> = ExtiLn<$name_res<$($i_tp,)* $($crt,)*>>;
+    pub type $name<$($i_tp,)*> = ExtiLn<$name_res<$($i_tp,)*>>;
 
     #[doc = $doc_res]
     #[allow(missing_docs)]
-    pub struct $name_res<$($i_tp: $int_ty<Att>,)* $($rt_tp: RegTag,)*> {
+    pub struct $name_res<$($i_tp: $int_ty<Att>,)*> {
       $(
         pub $int: $i_tp,
         pub $exticr_exti: $($exticr_path)::*::$exti_ty<Srt>,
       )*
       $(
         pub $exti_ftsr_ft: exti::$ftsr_path::$ft_ty<Srt>,
-        pub $exti_pr_pif: exti::$pr_path::$pif_ty<$rt_tp>,
+        pub $exti_pr_pif: exti::$pr_path::$pif_ty<Crt>,
         pub $exti_rtsr_rt: exti::$rtsr_path::$rt_ty<Srt>,
         pub $exti_swier_swi: exti::$swier_path::$swi_ty<Srt>,
       )*
@@ -293,51 +307,26 @@ macro_rules! exti_line {
     #[macro_export]
     macro_rules! $name_macro {
       ($reg:ident, $thr:ident) => {
-        <$crate::exti::ExtiLn<_> as ::drone_core::drv::Driver>::new(
-          $crate::exti::$name_res {
+        unsafe {
+          $crate::exti::ExtiLn::new($crate::exti::$name_res {
             $(
               $int: $thr.$int.to_attach(),
               $exticr_exti: $reg.$exticr.$exti,
             )*
             $(
               $exti_ftsr_ft: $reg.$exti_ftsr.$ft,
-              $exti_pr_pif: $reg.$exti_pr.$pif,
+              $exti_pr_pif: $reg.$exti_pr.$pif.acquire_copy(),
               $exti_rtsr_rt: $reg.$exti_rtsr.$rt,
               $exti_swier_swi: $reg.$exti_swier.$swi,
             )*
             $exti_emr_mr: $reg.$exti_emr.$mr,
             $exti_imr_mr: $reg.$exti_imr.$mr,
-          },
-        )
+          })
+        }
       };
     }
 
-    impl<$($i_tp,)*> Resource for $name_res<$($i_tp,)* $($crt,)*>
-    where
-      $($i_tp: $int_ty<Att>,)*
-    {
-      type Source = $name_res<$($i_tp,)* $($srt,)*>;
-
-      #[inline(always)]
-      fn from_source(source: Self::Source) -> Self {
-        Self {
-          $(
-            $int: source.$int,
-            $exticr_exti: source.$exticr_exti,
-          )*
-          $(
-            $exti_ftsr_ft: source.$exti_ftsr_ft,
-            $exti_pr_pif: source.$exti_pr_pif.to_copy(),
-            $exti_rtsr_rt: source.$exti_rtsr_rt,
-            $exti_swier_swi: source.$exti_swier_swi,
-          )*
-          $exti_emr_mr: source.$exti_emr_mr,
-          $exti_imr_mr: source.$exti_imr_mr,
-        }
-      }
-    }
-
-    impl<$($i_tp,)*> ExtiLnRes for $name_res<$($i_tp,)* $($crt,)*>
+    impl<$($i_tp,)*> ExtiLnRes for $name_res<$($i_tp,)*>
     where
       $($i_tp: $int_ty<Att>,)*
     {
@@ -351,7 +340,7 @@ macro_rules! exti_line {
     }
 
     $(
-      impl<$($i_tp_c,)*> ExtiLnConfRes for $name_res<$($i_tp_c,)* Crt>
+      impl<$($i_tp_c,)*> ExtiLnConfRes for $name_res<$($i_tp_c,)*>
       where
         $($i_tp_c: $int_ty_c<Att>,)*
       {
@@ -372,7 +361,7 @@ macro_rules! exti_line {
     )*
 
     $(
-      impl<$i_tp> ExtiLnExtRes for $name_res<$i_tp, $($crt_i,)*>
+      impl<$i_tp> ExtiLnExtRes for $name_res<$i_tp>
       where
         $i_tp: $int_ty<Att>,
       {
@@ -414,7 +403,6 @@ exti_line! {
   mr0,
   ((
     I: IntExti0,
-    (Crt),
     Exti0,
     exti0,
     afio::exticr1,
@@ -424,7 +412,6 @@ exti_line! {
   )),
   ((
     (I: IntExti0),
-    Rt: Srt Crt,
     Tr0,
     Pr0,
     Tr0,
@@ -471,7 +458,6 @@ exti_line! {
   mr1,
   ((
     I: IntExti1,
-    (Crt),
     Exti1,
     exti1,
     afio::exticr1,
@@ -481,7 +467,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1),
-    Rt: Srt Crt,
     Tr1,
     Pr1,
     Tr1,
@@ -528,7 +513,6 @@ exti_line! {
   mr2,
   ((
     I: IntExti2,
-    (Crt),
     Exti2,
     exti2,
     afio::exticr1,
@@ -538,7 +522,6 @@ exti_line! {
   )),
   ((
     (I: IntExti2),
-    Rt: Srt Crt,
     Tr2,
     Pr2,
     Tr2,
@@ -585,7 +568,6 @@ exti_line! {
   mr3,
   ((
     I: IntExti3,
-    (Crt),
     Exti3,
     exti3,
     afio::exticr1,
@@ -595,7 +577,6 @@ exti_line! {
   )),
   ((
     (I: IntExti3),
-    Rt: Srt Crt,
     Tr3,
     Pr3,
     Tr3,
@@ -642,7 +623,6 @@ exti_line! {
   mr4,
   ((
     I: IntExti4,
-    (Crt),
     Exti4,
     exti4,
     afio::exticr2,
@@ -652,7 +632,6 @@ exti_line! {
   )),
   ((
     (I: IntExti4),
-    Rt: Srt Crt,
     Tr4,
     Pr4,
     Tr4,
@@ -699,7 +678,6 @@ exti_line! {
   mr5,
   ((
     I: IntExti95,
-    (Crt),
     Exti5,
     exti9_5,
     afio::exticr2,
@@ -709,7 +687,6 @@ exti_line! {
   )),
   ((
     (I: IntExti95),
-    Rt: Srt Crt,
     Tr5,
     Pr5,
     Tr5,
@@ -756,7 +733,6 @@ exti_line! {
   mr6,
   ((
     I: IntExti95,
-    (Crt),
     Exti6,
     exti9_5,
     afio::exticr2,
@@ -766,7 +742,6 @@ exti_line! {
   )),
   ((
     (I: IntExti95),
-    Rt: Srt Crt,
     Tr6,
     Pr6,
     Tr6,
@@ -813,7 +788,6 @@ exti_line! {
   mr7,
   ((
     I: IntExti95,
-    (Crt),
     Exti7,
     exti9_5,
     afio::exticr2,
@@ -823,7 +797,6 @@ exti_line! {
   )),
   ((
     (I: IntExti95),
-    Rt: Srt Crt,
     Tr7,
     Pr7,
     Tr7,
@@ -870,7 +843,6 @@ exti_line! {
   mr8,
   ((
     I: IntExti95,
-    (Crt),
     Exti8,
     exti9_5,
     afio::exticr3,
@@ -880,7 +852,6 @@ exti_line! {
   )),
   ((
     (I: IntExti95),
-    Rt: Srt Crt,
     Tr8,
     Pr8,
     Tr8,
@@ -927,7 +898,6 @@ exti_line! {
   mr9,
   ((
     I: IntExti95,
-    (Crt),
     Exti9,
     exti9_5,
     afio::exticr3,
@@ -937,7 +907,6 @@ exti_line! {
   )),
   ((
     (I: IntExti95),
-    Rt: Srt Crt,
     Tr9,
     Pr9,
     Tr9,
@@ -984,7 +953,6 @@ exti_line! {
   mr10,
   ((
     I: IntExti1510,
-    (Crt),
     Exti10,
     exti15_10,
     afio::exticr3,
@@ -994,7 +962,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1510),
-    Rt: Srt Crt,
     Tr10,
     Pr10,
     Tr10,
@@ -1041,7 +1008,6 @@ exti_line! {
   mr11,
   ((
     I: IntExti1510,
-    (Crt),
     Exti11,
     exti15_10,
     afio::exticr3,
@@ -1051,7 +1017,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1510),
-    Rt: Srt Crt,
     Tr11,
     Pr11,
     Tr11,
@@ -1098,7 +1063,6 @@ exti_line! {
   mr12,
   ((
     I: IntExti1510,
-    (Crt),
     Exti12,
     exti15_10,
     afio::exticr4,
@@ -1108,7 +1072,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1510),
-    Rt: Srt Crt,
     Tr12,
     Pr12,
     Tr12,
@@ -1155,7 +1118,6 @@ exti_line! {
   mr13,
   ((
     I: IntExti1510,
-    (Crt),
     Exti13,
     exti15_10,
     afio::exticr4,
@@ -1165,7 +1127,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1510),
-    Rt: Srt Crt,
     Tr13,
     Pr13,
     Tr13,
@@ -1212,7 +1173,6 @@ exti_line! {
   mr14,
   ((
     I: IntExti1510,
-    (Crt),
     Exti14,
     exti15_10,
     afio::exticr4,
@@ -1222,7 +1182,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1510),
-    Rt: Srt Crt,
     Tr14,
     Pr14,
     Tr14,
@@ -1269,7 +1228,6 @@ exti_line! {
   mr15,
   ((
     I: IntExti1510,
-    (Crt),
     Exti15,
     exti15_10,
     afio::exticr4,
@@ -1279,7 +1237,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1510),
-    Rt: Srt Crt,
     Tr15,
     Pr15,
     Tr15,
@@ -1327,7 +1284,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Tr16,
     Pr16,
     Tr16,
@@ -1375,7 +1331,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Tr17,
     Pr17,
     Tr17,
@@ -1422,7 +1377,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Tr18,
     Pr18,
     Tr18,
@@ -1464,7 +1418,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Tr19,
     Pr19,
     Tr19,
@@ -1517,7 +1470,6 @@ exti_line! {
   mr0,
   ((
     I: IntExti0,
-    (Crt),
     Exti0,
     exti0,
     syscfg::exticr1,
@@ -1527,7 +1479,6 @@ exti_line! {
   )),
   ((
     (I: IntExti0),
-    Rt: Srt Crt,
     Tr0,
     Pr0,
     Tr0,
@@ -1580,7 +1531,6 @@ exti_line! {
   mr1,
   ((
     I: IntExti1,
-    (Crt),
     Exti1,
     exti1,
     syscfg::exticr1,
@@ -1590,7 +1540,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1),
-    Rt: Srt Crt,
     Tr1,
     Pr1,
     Tr1,
@@ -1643,7 +1592,6 @@ exti_line! {
   mr2,
   ((
     I: IntExti2,
-    (Crt),
     Exti2,
     exti2,
     syscfg::exticr1,
@@ -1653,7 +1601,6 @@ exti_line! {
   )),
   ((
     (I: IntExti2),
-    Rt: Srt Crt,
     Tr2,
     Pr2,
     Tr2,
@@ -1706,7 +1653,6 @@ exti_line! {
   mr3,
   ((
     I: IntExti3,
-    (Crt),
     Exti3,
     exti3,
     syscfg::exticr1,
@@ -1716,7 +1662,6 @@ exti_line! {
   )),
   ((
     (I: IntExti3),
-    Rt: Srt Crt,
     Tr3,
     Pr3,
     Tr3,
@@ -1769,7 +1714,6 @@ exti_line! {
   mr4,
   ((
     I: IntExti4,
-    (Crt),
     Exti4,
     exti4,
     syscfg::exticr2,
@@ -1779,7 +1723,6 @@ exti_line! {
   )),
   ((
     (I: IntExti4),
-    Rt: Srt Crt,
     Tr4,
     Pr4,
     Tr4,
@@ -1832,7 +1775,6 @@ exti_line! {
   mr5,
   ((
     I: IntExti95,
-    (Crt),
     Exti5,
     exti9_5,
     syscfg::exticr2,
@@ -1842,7 +1784,6 @@ exti_line! {
   )),
   ((
     (I: IntExti95),
-    Rt: Srt Crt,
     Tr5,
     Pr5,
     Tr5,
@@ -1895,7 +1836,6 @@ exti_line! {
   mr6,
   ((
     I: IntExti95,
-    (Crt),
     Exti6,
     exti9_5,
     syscfg::exticr2,
@@ -1905,7 +1845,6 @@ exti_line! {
   )),
   ((
     (I: IntExti95),
-    Rt: Srt Crt,
     Tr6,
     Pr6,
     Tr6,
@@ -1958,7 +1897,6 @@ exti_line! {
   mr7,
   ((
     I: IntExti95,
-    (Crt),
     Exti7,
     exti9_5,
     syscfg::exticr2,
@@ -1968,7 +1906,6 @@ exti_line! {
   )),
   ((
     (I: IntExti95),
-    Rt: Srt Crt,
     Tr7,
     Pr7,
     Tr7,
@@ -2021,7 +1958,6 @@ exti_line! {
   mr8,
   ((
     I: IntExti95,
-    (Crt),
     Exti8,
     exti9_5,
     syscfg::exticr3,
@@ -2031,7 +1967,6 @@ exti_line! {
   )),
   ((
     (I: IntExti95),
-    Rt: Srt Crt,
     Tr8,
     Pr8,
     Tr8,
@@ -2084,7 +2019,6 @@ exti_line! {
   mr9,
   ((
     I: IntExti95,
-    (Crt),
     Exti9,
     exti9_5,
     syscfg::exticr3,
@@ -2094,7 +2028,6 @@ exti_line! {
   )),
   ((
     (I: IntExti95),
-    Rt: Srt Crt,
     Tr9,
     Pr9,
     Tr9,
@@ -2147,7 +2080,6 @@ exti_line! {
   mr10,
   ((
     I: IntExti1510,
-    (Crt),
     Exti10,
     exti15_10,
     syscfg::exticr3,
@@ -2157,7 +2089,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1510),
-    Rt: Srt Crt,
     Tr10,
     Pr10,
     Tr10,
@@ -2210,7 +2141,6 @@ exti_line! {
   mr11,
   ((
     I: IntExti1510,
-    (Crt),
     Exti11,
     exti15_10,
     syscfg::exticr3,
@@ -2220,7 +2150,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1510),
-    Rt: Srt Crt,
     Tr11,
     Pr11,
     Tr11,
@@ -2273,7 +2202,6 @@ exti_line! {
   mr12,
   ((
     I: IntExti1510,
-    (Crt),
     Exti12,
     exti15_10,
     syscfg::exticr4,
@@ -2283,7 +2211,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1510),
-    Rt: Srt Crt,
     Tr12,
     Pr12,
     Tr12,
@@ -2336,7 +2263,6 @@ exti_line! {
   mr13,
   ((
     I: IntExti1510,
-    (Crt),
     Exti13,
     exti15_10,
     syscfg::exticr4,
@@ -2346,7 +2272,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1510),
-    Rt: Srt Crt,
     Tr13,
     Pr13,
     Tr13,
@@ -2399,7 +2324,6 @@ exti_line! {
   mr14,
   ((
     I: IntExti1510,
-    (Crt),
     Exti14,
     exti15_10,
     syscfg::exticr4,
@@ -2409,7 +2333,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1510),
-    Rt: Srt Crt,
     Tr14,
     Pr14,
     Tr14,
@@ -2462,7 +2385,6 @@ exti_line! {
   mr15,
   ((
     I: IntExti1510,
-    (Crt),
     Exti15,
     exti15_10,
     syscfg::exticr4,
@@ -2472,7 +2394,6 @@ exti_line! {
   )),
   ((
     (I: IntExti1510),
-    Rt: Srt Crt,
     Tr15,
     Pr15,
     Tr15,
@@ -2526,7 +2447,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Tr16,
     Pr16,
     Tr16,
@@ -2611,7 +2531,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Tr18,
     Pr18,
     Tr18,
@@ -2665,7 +2584,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Tr19,
     Pr19,
     Tr19,
@@ -2719,7 +2637,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Tr20,
     Pr20,
     Tr20,
@@ -2773,7 +2690,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Tr21,
     Pr21,
     Tr21,
@@ -2827,7 +2743,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Tr22,
     Pr22,
     Tr22,
@@ -3253,7 +3168,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Ft35,
     Pif35,
     Rt35,
@@ -3307,7 +3221,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Ft36,
     Pif36,
     Rt36,
@@ -3361,7 +3274,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Ft37,
     Pif37,
     Rt37,
@@ -3415,7 +3327,6 @@ exti_line! {
   (),
   ((
     (),
-    Rt: Srt Crt,
     Ft38,
     Pif38,
     Rt38,

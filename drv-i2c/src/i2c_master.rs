@@ -25,7 +25,6 @@ pub enum I2CMasterError {
 }
 
 /// I2C master session driver.
-#[derive(Driver)]
 pub struct I2CMaster<I2CRes, DmaRxBond, DmaTxBond, C>(
   I2CMasterRes<I2CRes, DmaRxBond, DmaTxBond, C>,
 )
@@ -40,7 +39,6 @@ where
 
 /// I2C master session resource.
 #[allow(missing_docs)]
-#[derive(Resource)]
 pub struct I2CMasterRes<I2CRes, DmaRxBond, DmaTxBond, C>
 where
   I2CRes: I2CDmaRxRes<DmaRxBond> + I2CDmaTxRes<DmaTxBond>,
@@ -94,6 +92,18 @@ where
     + DmaBondOnRgc<DmaRxBond::DmaRes>
     + DmaBondOnRgc<DmaTxBond::DmaRes>,
 {
+  /// Creates a new `I2CMaster`.
+  #[inline(always)]
+  pub fn new(res: I2CMasterRes<I2CRes, DmaRxBond, DmaTxBond, C>) -> Self {
+    I2CMaster(res)
+  }
+
+  /// Releases the underlying resources.
+  #[inline(always)]
+  pub fn free(self) -> I2CMasterRes<I2CRes, DmaRxBond, DmaTxBond, C> {
+    self.0
+  }
+
   /// Initializes DMA for the I2C as peripheral.
   #[inline]
   pub fn dma_init(&self) {
