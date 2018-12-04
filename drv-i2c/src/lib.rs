@@ -26,7 +26,7 @@ extern crate futures;
 extern crate test;
 
 pub mod i2c;
-pub mod i2c_master;
+pub mod i2c_sess;
 
 #[prelude_import]
 #[allow(unused_imports)]
@@ -38,8 +38,6 @@ use drone_core::heap;
 #[cfg(test)]
 heap! {
   struct Heap;
-  extern fn alloc_hook;
-  extern fn dealloc_hook;
   size = 0x40000;
   pools = [
     [0x4; 0x4000],
@@ -52,17 +50,3 @@ heap! {
 #[cfg(test)]
 #[global_allocator]
 static mut GLOBAL: Heap = Heap::new();
-
-#[cfg(test)]
-fn alloc_hook(
-  _layout: ::core::alloc::Layout,
-  _pool: &::drone_core::heap::Pool,
-) {
-}
-
-#[cfg(test)]
-fn dealloc_hook(
-  _layout: ::core::alloc::Layout,
-  _pool: &::drone_core::heap::Pool,
-) {
-}

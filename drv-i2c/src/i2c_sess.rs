@@ -1,4 +1,4 @@
-//! I2C master session.
+//! I2C session.
 
 use drone_cortex_m::reg::prelude::*;
 use drone_cortex_m::reg::{RegGuard, RegGuardCnt};
@@ -10,9 +10,9 @@ use futures::future::Either;
 use futures::prelude::*;
 use i2c::{I2CBreak, I2CDmaRxRes, I2CDmaTxRes, I2CError, I2COn, I2C};
 
-/// I2C master session error.
+/// I2C session error.
 #[derive(Debug, Fail)]
-pub enum I2CMasterError {
+pub enum I2CSessError {
   /// DMA error.
   #[fail(display = "DMA error: {}", _0)]
   Dma(DmaTransferError),
@@ -24,9 +24,9 @@ pub enum I2CMasterError {
   I2CError(I2CError),
 }
 
-/// I2C master session driver.
-pub struct I2CMaster<I2CRes, DmaRxBond, DmaTxBond, C>(
-  I2CMasterRes<I2CRes, DmaRxBond, DmaTxBond, C>,
+/// I2C session driver.
+pub struct I2CSess<I2CRes, DmaRxBond, DmaTxBond, C>(
+  I2CSessRes<I2CRes, DmaRxBond, DmaTxBond, C>,
 )
 where
   I2CRes: I2CDmaRxRes<DmaRxBond> + I2CDmaTxRes<DmaTxBond>,
@@ -37,9 +37,9 @@ where
     + DmaBondOnRgc<DmaRxBond::DmaRes>
     + DmaBondOnRgc<DmaTxBond::DmaRes>;
 
-/// I2C master session resource.
+/// I2C session resource.
 #[allow(missing_docs)]
-pub struct I2CMasterRes<I2CRes, DmaRxBond, DmaTxBond, C>
+pub struct I2CSessRes<I2CRes, DmaRxBond, DmaTxBond, C>
 where
   I2CRes: I2CDmaRxRes<DmaRxBond> + I2CDmaTxRes<DmaTxBond>,
   DmaRxBond: DmaBond,
@@ -56,7 +56,7 @@ where
 }
 
 #[allow(missing_docs)]
-impl<I2CRes, DmaRxBond, DmaTxBond, C> I2CMaster<I2CRes, DmaRxBond, DmaTxBond, C>
+impl<I2CRes, DmaRxBond, DmaTxBond, C> I2CSess<I2CRes, DmaRxBond, DmaTxBond, C>
 where
   I2CRes: I2CDmaRxRes<DmaRxBond> + I2CDmaTxRes<DmaTxBond>,
   DmaRxBond: DmaBond,
@@ -82,7 +82,7 @@ where
   }
 }
 
-impl<I2CRes, DmaRxBond, DmaTxBond, C> I2CMaster<I2CRes, DmaRxBond, DmaTxBond, C>
+impl<I2CRes, DmaRxBond, DmaTxBond, C> I2CSess<I2CRes, DmaRxBond, DmaTxBond, C>
 where
   I2CRes: I2CDmaRxRes<DmaRxBond> + I2CDmaTxRes<DmaTxBond>,
   DmaRxBond: DmaBond,
@@ -92,15 +92,15 @@ where
     + DmaBondOnRgc<DmaRxBond::DmaRes>
     + DmaBondOnRgc<DmaTxBond::DmaRes>,
 {
-  /// Creates a new `I2CMaster`.
+  /// Creates a new `I2CSess`.
   #[inline(always)]
-  pub fn new(res: I2CMasterRes<I2CRes, DmaRxBond, DmaTxBond, C>) -> Self {
-    I2CMaster(res)
+  pub fn new(res: I2CSessRes<I2CRes, DmaRxBond, DmaTxBond, C>) -> Self {
+    I2CSess(res)
   }
 
   /// Releases the underlying resources.
   #[inline(always)]
-  pub fn free(self) -> I2CMasterRes<I2CRes, DmaRxBond, DmaTxBond, C> {
+  pub fn free(self) -> I2CSessRes<I2CRes, DmaRxBond, DmaTxBond, C> {
     self.0
   }
 
@@ -121,7 +121,7 @@ where
     slave_addr: u8,
     i2c_cr1_val: I2CRes::Cr1Val,
     i2c_cr2_val: I2CRes::Cr2Val,
-  ) -> impl Future<Item = (), Error = I2CMasterError> + 'sess {
+  ) -> impl Future<Item = (), Error = I2CSessError> + 'sess {
     self.read_impl(buf, slave_addr, i2c_cr1_val, i2c_cr2_val, false)
   }
 
@@ -136,7 +136,7 @@ where
     slave_addr: u8,
     i2c_cr1_val: I2CRes::Cr1Val,
     i2c_cr2_val: I2CRes::Cr2Val,
-  ) -> impl Future<Item = (), Error = I2CMasterError> + 'sess {
+  ) -> impl Future<Item = (), Error = I2CSessError> + 'sess {
     self.read_impl(buf, slave_addr, i2c_cr1_val, i2c_cr2_val, true)
   }
 
@@ -151,7 +151,7 @@ where
     slave_addr: u8,
     i2c_cr1_val: I2CRes::Cr1Val,
     i2c_cr2_val: I2CRes::Cr2Val,
-  ) -> impl Future<Item = (), Error = I2CMasterError> + 'sess {
+  ) -> impl Future<Item = (), Error = I2CSessError> + 'sess {
     self.write_impl(buf, slave_addr, i2c_cr1_val, i2c_cr2_val, false)
   }
 
@@ -166,7 +166,7 @@ where
     slave_addr: u8,
     i2c_cr1_val: I2CRes::Cr1Val,
     i2c_cr2_val: I2CRes::Cr2Val,
-  ) -> impl Future<Item = (), Error = I2CMasterError> + 'sess {
+  ) -> impl Future<Item = (), Error = I2CSessError> + 'sess {
     self.write_impl(buf, slave_addr, i2c_cr1_val, i2c_cr2_val, true)
   }
 
@@ -177,7 +177,7 @@ where
     mut i2c_cr1_val: I2CRes::Cr1Val,
     mut i2c_cr2_val: I2CRes::Cr2Val,
     autoend: bool,
-  ) -> impl Future<Item = (), Error = I2CMasterError> + 'sess {
+  ) -> impl Future<Item = (), Error = I2CSessError> + 'sess {
     if buf.len() > 255 {
       panic!("I2C session overflow");
     }
@@ -264,7 +264,7 @@ where
     mut i2c_cr1_val: I2CRes::Cr1Val,
     mut i2c_cr2_val: I2CRes::Cr2Val,
     autoend: bool,
-  ) -> impl Future<Item = (), Error = I2CMasterError> + 'sess {
+  ) -> impl Future<Item = (), Error = I2CSessError> + 'sess {
     if buf.len() > 255 {
       panic!("I2C session overflow");
     }
@@ -402,20 +402,20 @@ where
   }
 }
 
-impl From<DmaTransferError> for I2CMasterError {
+impl From<DmaTransferError> for I2CSessError {
   fn from(err: DmaTransferError) -> Self {
-    I2CMasterError::Dma(err)
+    I2CSessError::Dma(err)
   }
 }
 
-impl From<I2CBreak> for I2CMasterError {
+impl From<I2CBreak> for I2CSessError {
   fn from(err: I2CBreak) -> Self {
-    I2CMasterError::I2CBreak(err)
+    I2CSessError::I2CBreak(err)
   }
 }
 
-impl From<I2CError> for I2CMasterError {
+impl From<I2CError> for I2CSessError {
   fn from(err: I2CError) -> Self {
-    I2CMasterError::I2CError(err)
+    I2CSessError::I2CError(err)
   }
 }

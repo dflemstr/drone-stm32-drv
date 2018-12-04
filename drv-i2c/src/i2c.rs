@@ -315,7 +315,7 @@ pub trait I2CResIcr {
   res_decl!(IcrAlertcf, icr_alertcf);
 }
 
-/// DMA-driven I2C resource.
+/// DMA-receiver I2C resource.
 #[allow(missing_docs)]
 pub trait I2CDmaRxRes<T: DmaBond>: I2CRes {
   #[cfg(any(
@@ -346,7 +346,7 @@ pub trait I2CDmaRxRes<T: DmaBond>: I2CRes {
   );
 }
 
-/// DMA-driven I2C resource.
+/// DMA-transmitter I2C resource.
 #[allow(missing_docs)]
 pub trait I2CDmaTxRes<T: DmaBond>: I2CRes {
   #[cfg(any(
@@ -885,22 +885,22 @@ macro_rules! i2c {
     $rcc_apb_enr:ident,
     $i2cen:ident,
     (
-      $dma_rx_req_id:expr,
-      $((
+      $dma_rx_req_id:expr
+      $(,(
         $dma_rx_bond:ident,
         $dma_rx_res:ident,
         $int_dma_rx:ident,
         $dma_rx_cs:expr
-      )),*
+      ))*
     ),
     (
-      $dma_tx_req_id:expr,
-      $((
+      $dma_tx_req_id:expr
+      $(,(
         $dma_tx_bond:ident,
         $dma_tx_res:ident,
         $int_dma_tx:ident,
         $dma_tx_cs:expr
-      )),*
+      ))*
     ),
   ) => {
     #[doc = $doc]
@@ -1182,7 +1182,7 @@ macro_rules! i2c {
         Rx: $int_dma_rx<Rtt>,
         Ev: $int_ev_ty<Rtt>,
         Er: $int_er_ty<Rtt>,
-        C: DmaBondOnRgc<$dma_rx_res<Rx, Crt>>,
+        C: DmaBondOnRgc<$dma_rx_res<Rx>>,
       {
         #[inline(always)]
         fn dma_rx_ch_init(
@@ -1234,7 +1234,7 @@ macro_rules! i2c {
         Tx: $int_dma_tx<Rtt>,
         Ev: $int_ev_ty<Rtt>,
         Er: $int_er_ty<Rtt>,
-        C: DmaBondOnRgc<$dma_tx_res<Tx, Crt>>,
+        C: DmaBondOnRgc<$dma_tx_res<Tx>>,
       {
         #[inline(always)]
         fn dma_tx_ch_init(
@@ -1294,13 +1294,13 @@ i2c! {
   i2c1en,
   (
     16,
-    (Dma1Ch7Bond, Dma1Ch7Res, IntDma1Ch7, 3),
-    (Dma2Ch6Bond, Dma2Ch6Res, IntDma2Ch6, 5)
+    (Dma1Ch7Bond, Dma1Ch7Res, IntDma1Ch7, 0b0011),
+    (Dma2Ch6Bond, Dma2Ch6Res, IntDma2Ch6, 0b0101)
   ),
   (
     17,
-    (Dma1Ch6Bond, Dma1Ch6Res, IntDma1Ch6, 3),
-    (Dma2Ch7Bond, Dma2Ch7Res, IntDma2Ch7, 5)
+    (Dma1Ch6Bond, Dma1Ch6Res, IntDma1Ch6, 0b0011),
+    (Dma2Ch7Bond, Dma2Ch7Res, IntDma2Ch7, 0b0101)
   ),
 }
 
@@ -1346,8 +1346,8 @@ i2c! {
   rcc_apb1enr1_i2c2en,
   rcc_apb1enr1,
   i2c2en,
-  (18, (Dma1Ch5Bond, Dma1Ch5Res, IntDma1Ch5, 3)),
-  (19, (Dma1Ch4Bond, Dma1Ch4Res, IntDma1Ch4, 3)),
+  (18, (Dma1Ch5Bond, Dma1Ch5Res, IntDma1Ch5, 0b0011)),
+  (19, (Dma1Ch4Bond, Dma1Ch4Res, IntDma1Ch4, 0b0011)),
 }
 
 #[cfg(any(
@@ -1392,8 +1392,8 @@ i2c! {
   rcc_apb1enr1_i2c3en,
   rcc_apb1enr1,
   i2c3en,
-  (20, (Dma1Ch3Bond, Dma1Ch3Res, IntDma1Ch3, 3)),
-  (21, (Dma1Ch2Bond, Dma1Ch2Res, IntDma1Ch2, 3)),
+  (20, (Dma1Ch3Bond, Dma1Ch3Res, IntDma1Ch3, 0b0011)),
+  (21, (Dma1Ch2Bond, Dma1Ch2Res, IntDma1Ch2, 0b0011)),
 }
 
 #[cfg(any(
@@ -1436,6 +1436,6 @@ i2c! {
   rcc_apb1enr2_i2c4en,
   rcc_apb1enr2,
   i2c4en,
-  (22, (Dma2Ch1Bond, Dma2Ch1Res, IntDma2Ch1, 0)),
-  (23, (Dma2Ch2Bond, Dma2Ch2Res, IntDma2Ch2, 0)),
+  (22, (Dma2Ch1Bond, Dma2Ch1Res, IntDma2Ch1, 0b0000)),
+  (23, (Dma2Ch2Bond, Dma2Ch2Res, IntDma2Ch2, 0b0000)),
 }

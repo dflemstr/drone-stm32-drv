@@ -1,7 +1,8 @@
-//! Drone for STM32. DMA driver.
+//! Drone for STM32. UART driver.
 
 #![feature(generators)]
 #![feature(marker_trait_attr)]
+#![feature(never_type)]
 #![feature(prelude_import)]
 #![no_std]
 #![warn(missing_docs)]
@@ -13,24 +14,17 @@
 #[macro_use]
 extern crate drone_core;
 extern crate drone_cortex_m;
+extern crate drone_stm32_drv_dma;
 extern crate drone_stm32_map;
 extern crate failure;
+#[allow(unused_imports)]
 #[macro_use]
 extern crate failure_derive;
 extern crate futures;
 #[cfg(test)]
 extern crate test;
 
-pub mod dma;
-#[cfg(any(
-  feature = "stm32l4r5",
-  feature = "stm32l4r7",
-  feature = "stm32l4r9",
-  feature = "stm32l4s5",
-  feature = "stm32l4s7",
-  feature = "stm32l4s9"
-))]
-pub mod dmamux;
+pub mod uart;
 
 #[prelude_import]
 #[allow(unused_imports)]

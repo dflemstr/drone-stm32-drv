@@ -212,8 +212,8 @@ impl<T: ExtiLnExtRes + ExtiLnConfRes> ExtiLn<T> {
   {
     let pif = *self.0.pr_pif();
     fib::new(move || loop {
-      if pif.read_bit_band() {
-        pif.set_bit_band();
+      if pif.read_bit() {
+        pif.set_bit();
         yield Some(());
       }
       yield None;
@@ -225,8 +225,8 @@ impl<T: ExtiLnExtRes + ExtiLnConfRes> ExtiLn<T> {
   ) -> impl Fiber<Input = (), Yield = (), Return = Result<(), E>> {
     let pif = *self.0.pr_pif();
     fib::new(move || loop {
-      if pif.read_bit_band() {
-        pif.set_bit_band();
+      if pif.read_bit() {
+        pif.set_bit();
         break Ok(());
       }
       yield;

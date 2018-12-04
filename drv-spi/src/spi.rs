@@ -219,7 +219,7 @@ pub trait SpiResCr2 {
   fn set_frame_8(&self, cr2: &mut Self::Cr2Val);
 }
 
-/// DMA-driven SPI resource.
+/// DMA-receiver SPI resource.
 #[allow(missing_docs)]
 pub trait SpiDmaRxRes<T: DmaBond>: SpiRes {
   #[cfg(any(
@@ -250,7 +250,7 @@ pub trait SpiDmaRxRes<T: DmaBond>: SpiRes {
   );
 }
 
-/// DMA-driven SPI resource.
+/// DMA-transmitter SPI resource.
 #[allow(missing_docs)]
 pub trait SpiDmaTxRes<T: DmaBond>: SpiRes {
   #[cfg(any(
@@ -705,28 +705,28 @@ macro_rules! spi {
     $rcc_apb_enr:ident,
     $spien:ident,
     (
-      $dma_rx_req_id:expr,
+      $dma_rx_req_id:expr
       $(
-        $(#[$dma_rx_attr:meta])*
+        , $(#[$dma_rx_attr:meta])*
         (
           $dma_rx_bond:ident,
           $dma_rx_res:ident,
           $int_dma_rx:ident,
           $dma_rx_cs:expr
         )
-      ),*
+      )*
     ),
     (
-      $dma_tx_req_id:expr,
+      $dma_tx_req_id:expr
       $(
-        $(#[$dma_tx_attr:meta])*
+        , $(#[$dma_tx_attr:meta])*
         (
           $dma_tx_bond:ident,
           $dma_tx_res:ident,
           $int_dma_tx:ident,
           $dma_tx_cs:expr
         )
-      ),*
+      )*
     ),
   ) => {
     #[doc = $doc]
@@ -903,7 +903,7 @@ macro_rules! spi {
       where
         Rx: $int_dma_rx<Rtt>,
         I: $int_ty<Rtt>,
-        C: DmaBondOnRgc<$dma_rx_res<Rx, Crt>>,
+        C: DmaBondOnRgc<$dma_rx_res<Rx>>,
       {
         #[cfg(any(
           feature = "stm32l4x1",
@@ -961,7 +961,7 @@ macro_rules! spi {
       where
         Tx: $int_dma_tx<Rtt>,
         I: $int_ty<Rtt>,
-        C: DmaBondOnRgc<$dma_tx_res<Tx, Crt>>,
+        C: DmaBondOnRgc<$dma_tx_res<Tx>>,
       {
         #[cfg(any(
           feature = "stm32l4x1",
@@ -1026,7 +1026,7 @@ spi! {
   spi1en,
   (
     10,
-    (Dma1Ch2Bond, Dma1Ch2Res, IntDma1Ch2, 1),
+    (Dma1Ch2Bond, Dma1Ch2Res, IntDma1Ch2, 0b0001),
     #[cfg(any(
       feature = "stm32l4x1",
       feature = "stm32l4x2",
@@ -1040,11 +1040,11 @@ spi! {
       feature = "stm32l4s7",
       feature = "stm32l4s9"
     ))]
-    (Dma2Ch3Bond, Dma2Ch3Res, IntDma2Ch3, 4)
+    (Dma2Ch3Bond, Dma2Ch3Res, IntDma2Ch3, 0b0100)
   ),
   (
     11,
-    (Dma1Ch3Bond, Dma1Ch3Res, IntDma1Ch3, 1),
+    (Dma1Ch3Bond, Dma1Ch3Res, IntDma1Ch3, 0b0001),
     #[cfg(any(
       feature = "stm32l4x1",
       feature = "stm32l4x2",
@@ -1058,7 +1058,7 @@ spi! {
       feature = "stm32l4s7",
       feature = "stm32l4s9"
     ))]
-    (Dma2Ch4Bond, Dma2Ch4Res, IntDma2Ch4, 4)
+    (Dma2Ch4Bond, Dma2Ch4Res, IntDma2Ch4, 0b0100)
   ),
 }
 
@@ -1102,8 +1102,8 @@ spi! {
   rcc_apb1enr1_spi2en,
   rcc_apb1enr1,
   spi2en,
-  (12, (Dma1Ch4Bond, Dma1Ch4Res, IntDma1Ch4, 1)),
-  (13, (Dma1Ch5Bond, Dma1Ch5Res, IntDma1Ch5, 1)),
+  (12, (Dma1Ch4Bond, Dma1Ch4Res, IntDma1Ch4, 0b0001)),
+  (13, (Dma1Ch5Bond, Dma1Ch5Res, IntDma1Ch5, 0b0001)),
 }
 
 #[cfg(any(
@@ -1146,6 +1146,6 @@ spi! {
   rcc_apb1enr1_spi3en,
   rcc_apb1enr1,
   spi3en,
-  (14, (Dma2Ch1Bond, Dma2Ch1Res, IntDma2Ch1, 3)),
-  (15, (Dma2Ch2Bond, Dma2Ch2Res, IntDma2Ch2, 3)),
+  (14, (Dma2Ch1Bond, Dma2Ch1Res, IntDma2Ch1, 0b0011)),
+  (15, (Dma2Ch2Bond, Dma2Ch2Res, IntDma2Ch2, 0b0011)),
 }
