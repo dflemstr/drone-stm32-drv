@@ -1,14 +1,16 @@
 //! I2C session.
 
-use drone_cortex_m::reg::prelude::*;
-use drone_cortex_m::reg::{RegGuard, RegGuardCnt};
-use drone_cortex_m::thr::prelude::*;
+use crate::i2c::{I2CBreak, I2CDmaRxRes, I2CDmaTxRes, I2CError, I2COn, I2C};
+use drone_core::awt;
+use drone_cortex_m::{
+  reg::{prelude::*, RegGuard, RegGuardCnt},
+  thr::prelude::*,
+};
 use drone_stm32_drv_dma::dma::{
   DmaBond, DmaBondOnRgc, DmaResCcr, DmaTransferError, DmaTxRes,
 };
-use futures::future::Either;
-use futures::prelude::*;
-use i2c::{I2CBreak, I2CDmaRxRes, I2CDmaTxRes, I2CError, I2COn, I2C};
+use failure::Fail;
+use futures::{future::Either, prelude::*};
 
 /// I2C session error.
 #[derive(Debug, Fail)]
@@ -95,7 +97,7 @@ where
   /// Creates a new `I2CSess`.
   #[inline(always)]
   pub fn new(res: I2CSessRes<I2CRes, DmaRxBond, DmaTxBond, C>) -> Self {
-    I2CSess(res)
+    Self(res)
   }
 
   /// Releases the underlying resources.
@@ -181,7 +183,7 @@ where
     if buf.len() > 255 {
       panic!("I2C session overflow");
     }
-    async(move || {
+    asnc(move || {
       unsafe { self.0.dma_rx.dma_ch().set_maddr(buf.as_mut_ptr() as usize) };
       self.0.dma_rx.dma_ch().set_size(buf.len());
       self.0.dma_rx.dma_ch().ccr().store_val({
@@ -201,7 +203,7 @@ where
       let i2c_error = self.0.i2c.transfer_error();
       self.set_i2c_cr2(&mut i2c_cr2_val, slave_addr, autoend, buf.len(), false);
       self.0.i2c.cr2().store_val(i2c_cr2_val);
-      match await!(dma_rx.select(i2c_break).select(i2c_error)) {
+      match awt!(dma_rx.select(i2c_break).select(i2c_error)) {
         Ok(Either::Left((Either::Left(((), i2c_break)), i2c_error))) => {
           drop(i2c_break);
           drop(i2c_error);
@@ -268,7 +270,7 @@ where
     if buf.len() > 255 {
       panic!("I2C session overflow");
     }
-    async(move || {
+    asnc(move || {
       unsafe { self.0.dma_tx.dma_ch().set_maddr(buf.as_ptr() as usize) };
       self.0.dma_tx.dma_ch().set_size(buf.len());
       self.0.dma_tx.dma_ch().ccr().store_val({
@@ -288,7 +290,7 @@ where
       let i2c_error = self.0.i2c.transfer_error();
       self.set_i2c_cr2(&mut i2c_cr2_val, slave_addr, autoend, buf.len(), true);
       self.0.i2c.cr2().store_val(i2c_cr2_val);
-      match await!(dma_tx.select(i2c_break).select(i2c_error)) {
+      match awt!(dma_tx.select(i2c_break).select(i2c_error)) {
         Ok(Either::Left((Either::Left(((), i2c_break)), i2c_error))) => {
           drop(i2c_break);
           drop(i2c_error);

@@ -1,12 +1,14 @@
 //! Universal Asynchronous Receiver/Transmitter.
 
 use core::ptr::read_volatile;
-use drone_core::bitfield::Bitfield;
-use drone_cortex_m::fib::{self, Fiber};
-use drone_cortex_m::reg::marker::*;
-use drone_cortex_m::reg::prelude::*;
-use drone_cortex_m::reg::{RegGuard, RegGuardCnt, RegGuardRes};
-use drone_cortex_m::thr::prelude::*;
+#[allow(unused_imports)]
+use drone_core::res_impl;
+use drone_core::{bitfield::Bitfield, res_decl};
+use drone_cortex_m::{
+  fib::{self, Fiber},
+  reg::{marker::*, prelude::*, RegGuard, RegGuardCnt, RegGuardRes},
+  thr::prelude::*,
+};
 #[cfg(any(
   feature = "stm32l4x1",
   feature = "stm32l4x2",
@@ -74,6 +76,7 @@ use drone_stm32_map::thr::{
 use drone_stm32_map::thr::{
   IntLpuart1, IntUart4, IntUart5, IntUsart1, IntUsart2, IntUsart3,
 };
+use failure::Fail;
 use futures::prelude::*;
 
 /// Error returned from [`Uart::rx_stream`](Uart::rx_stream) on overflow.
@@ -427,7 +430,7 @@ where
   ///
   /// `res` must be the only owner of its contained resources.
   pub unsafe fn new(res: T, rgc: C) -> Self {
-    Uart(res, rgc)
+    Self(res, rgc)
   }
 
   /// Releases the underlying resources.
@@ -629,7 +632,7 @@ pub struct UartOn<T: UartRes>(T::RccApbEnrUartEn);
 impl<T: UartRes> Clone for UartOn<T> {
   #[inline(always)]
   fn clone(&self) -> Self {
-    UartOn(self.0)
+    Self(self.0)
   }
 }
 

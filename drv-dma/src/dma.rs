@@ -8,18 +8,20 @@
   feature = "stm32l4s7",
   feature = "stm32l4s9"
 ))]
-use dmamux::{
+use crate::dmamux::{
   Dmamux1Ch0Res, Dmamux1Ch10Res, Dmamux1Ch11Res, Dmamux1Ch12Res,
   Dmamux1Ch13Res, Dmamux1Ch1Res, Dmamux1Ch2Res, Dmamux1Ch3Res, Dmamux1Ch4Res,
   Dmamux1Ch5Res, Dmamux1Ch6Res, Dmamux1Ch7Res, Dmamux1Ch8Res, Dmamux1Ch9Res,
   DmamuxCh, DmamuxChRes, DmamuxOn,
 };
-use drone_core::bitfield::Bitfield;
-use drone_cortex_m::fib;
-use drone_cortex_m::reg::marker::*;
-use drone_cortex_m::reg::prelude::*;
-use drone_cortex_m::reg::{RegGuard, RegGuardCnt, RegGuardRes};
-use drone_cortex_m::thr::prelude::*;
+#[allow(unused_imports)]
+use drone_core::res_impl;
+use drone_core::{bitfield::Bitfield, res_decl};
+use drone_cortex_m::{
+  fib,
+  reg::{marker::*, prelude::*, RegGuard, RegGuardCnt, RegGuardRes},
+  thr::prelude::*,
+};
 #[cfg(any(
   feature = "stm32f100",
   feature = "stm32f101",
@@ -97,6 +99,7 @@ use drone_stm32_map::thr::{
 use drone_stm32_map::thr::{
   IntDma2Channel6 as IntDma2Ch6, IntDma2Channel7 as IntDma2Ch7,
 };
+use failure::Fail;
 use futures::prelude::*;
 
 /// Error returned when `DMA_ISR_TEIFx` flag in set.
@@ -527,7 +530,7 @@ impl<T: DmaRes> Dma<T> {
   /// `res` must be the only owner of its contained resources.
   #[inline(always)]
   pub unsafe fn new(res: T) -> Self {
-    Dma(res)
+    Self(res)
   }
 
   /// Releases the underlying resources.
@@ -637,7 +640,7 @@ where
   /// `res` must be the only owner of its contained resources.
   #[inline(always)]
   pub unsafe fn new(res: T, rgc: C) -> Self {
-    DmaRcc(res, rgc)
+    Self(res, rgc)
   }
 
   /// Releases the underlying resources.
@@ -655,7 +658,7 @@ where
 impl<T: DmaRccRes> Clone for DmaOn<T> {
   #[inline(always)]
   fn clone(&self) -> Self {
-    DmaOn(self.0)
+    Self(self.0)
   }
 }
 

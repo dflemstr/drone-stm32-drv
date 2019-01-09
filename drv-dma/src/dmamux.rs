@@ -1,9 +1,11 @@
 //! DMA request multiplexer.
 
-use drone_core::bitfield::Bitfield;
-use drone_cortex_m::reg::marker::*;
-use drone_cortex_m::reg::prelude::*;
-use drone_cortex_m::reg::{RegGuard, RegGuardCnt, RegGuardRes};
+#[allow(unused_imports)]
+use drone_core::res_impl;
+use drone_core::{bitfield::Bitfield, res_decl};
+use drone_cortex_m::reg::{
+  marker::*, prelude::*, RegGuard, RegGuardCnt, RegGuardRes,
+};
 use drone_stm32_map::reg::{dmamux1, rcc};
 
 /// DMAMUX channel driver.
@@ -144,7 +146,7 @@ impl<T: DmamuxChRes> DmamuxCh<T> {
   /// Creates a new `DmamuxCh`.
   #[inline(always)]
   pub fn new(res: T) -> Self {
-    DmamuxCh(res)
+    Self(res)
   }
 
   /// Releases the underlying resources.
@@ -201,7 +203,7 @@ impl<T: DmamuxRgRes> DmamuxRg<T> {
   /// Creates a new `DmamuxRg`.
   #[inline(always)]
   pub fn new(res: T) -> Self {
-    DmamuxRg(res)
+    Self(res)
   }
 
   /// Releases the underlying resources.
@@ -223,7 +225,7 @@ where
   /// `res` must be the only owner of its contained resources.
   #[inline(always)]
   pub unsafe fn new(res: T, rgc: C) -> Self {
-    DmamuxRcc(res, rgc)
+    Self(res, rgc)
   }
 
   /// Releases the underlying resources.
@@ -241,7 +243,7 @@ where
 impl<T: DmamuxRccRes> Clone for DmamuxOn<T> {
   #[inline(always)]
   fn clone(&self) -> Self {
-    DmamuxOn(self.0)
+    Self(self.0)
   }
 }
 

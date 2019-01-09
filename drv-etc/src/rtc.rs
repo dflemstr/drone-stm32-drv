@@ -188,7 +188,7 @@ impl Rtc {
   /// Creates a new `Rtc`.
   #[inline(always)]
   pub fn new(res: RtcRes) -> Self {
-    Rtc(res)
+    Self(res)
   }
 
   /// Releases the underlying resources.

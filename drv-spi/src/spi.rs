@@ -1,11 +1,13 @@
 //! Serial Peripheral Interface.
 
 use core::ptr::{read_volatile, write_volatile};
-use drone_core::bitfield::Bitfield;
-use drone_cortex_m::reg::marker::*;
-use drone_cortex_m::reg::prelude::*;
-use drone_cortex_m::reg::{RegGuard, RegGuardCnt, RegGuardRes};
-use drone_cortex_m::thr::prelude::*;
+#[allow(unused_imports)]
+use drone_core::res_impl;
+use drone_core::{bitfield::Bitfield, res_decl};
+use drone_cortex_m::{
+  reg::{marker::*, prelude::*, RegGuard, RegGuardCnt, RegGuardRes},
+  thr::prelude::*,
+};
 #[cfg(any(
   feature = "stm32l4x1",
   feature = "stm32l4x2",
@@ -107,6 +109,7 @@ use drone_stm32_map::thr::{
   feature = "stm32l4s9"
 ))]
 use drone_stm32_map::thr::{IntSpi1, IntSpi2, IntSpi3};
+use failure::Fail;
 
 /// Motorola SPI mode error.
 #[derive(Debug, Fail)]
@@ -432,7 +435,7 @@ where
   ///
   /// `res` must be the only owner of its contained resources.
   pub unsafe fn new(res: T, rgc: C) -> Self {
-    Spi(res, rgc)
+    Self(res, rgc)
   }
 
   /// Releases the underlying resources.
@@ -514,6 +517,7 @@ where
   }
 
   /// Sets the size of a data frame to 8 bits.
+  #[allow(clippy::used_underscore_binding)]
   #[inline(always)]
   pub fn set_frame_8(&self, _cr2: &mut T::Cr2Val) {
     #[cfg(any(
@@ -656,7 +660,7 @@ where
 impl<T: SpiRes> Clone for SpiOn<T> {
   #[inline(always)]
   fn clone(&self) -> Self {
-    SpiOn(self.0)
+    Self(self.0)
   }
 }
 

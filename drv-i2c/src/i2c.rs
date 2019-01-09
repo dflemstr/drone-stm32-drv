@@ -1,11 +1,13 @@
 //! Inter-Integrated Circuit.
 
-use drone_core::bitfield::Bitfield;
-use drone_cortex_m::fib;
-use drone_cortex_m::reg::marker::*;
-use drone_cortex_m::reg::prelude::*;
-use drone_cortex_m::reg::{RegGuard, RegGuardCnt, RegGuardRes};
-use drone_cortex_m::thr::prelude::*;
+#[allow(unused_imports)]
+use drone_core::res_impl;
+use drone_core::{bitfield::Bitfield, res_decl};
+use drone_cortex_m::{
+  fib,
+  reg::{marker::*, prelude::*, RegGuard, RegGuardCnt, RegGuardRes},
+  thr::prelude::*,
+};
 #[cfg(any(
   feature = "stm32l4x1",
   feature = "stm32l4x2",
@@ -106,6 +108,7 @@ use drone_stm32_map::thr::{
   feature = "stm32l4s9"
 ))]
 use drone_stm32_map::thr::{IntI2C4Er, IntI2C4Ev};
+use failure::Fail;
 use futures::prelude::*;
 
 /// I2C error.
@@ -629,7 +632,7 @@ where
   /// `res` must be the only owner of its contained resources.
   #[inline(always)]
   pub unsafe fn new(res: T, rgc: C) -> Self {
-    I2C(res, rgc)
+    Self(res, rgc)
   }
 
   /// Releases the underlying resources.
@@ -829,7 +832,7 @@ where
 impl<T: I2CRes> Clone for I2COn<T> {
   #[inline(always)]
   fn clone(&self) -> Self {
-    I2COn(self.0)
+    Self(self.0)
   }
 }
 

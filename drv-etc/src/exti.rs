@@ -1,9 +1,13 @@
 //! Extended interrupts and events controller.
 
-use drone_cortex_m::fib::{self, Fiber};
-use drone_cortex_m::reg::marker::*;
-use drone_cortex_m::reg::prelude::*;
-use drone_cortex_m::thr::prelude::*;
+use drone_core::res_decl;
+#[allow(unused_imports)]
+use drone_core::res_impl;
+use drone_cortex_m::{
+  fib::{self, Fiber},
+  reg::{marker::*, prelude::*},
+  thr::prelude::*,
+};
 #[cfg(any(
   feature = "stm32f100",
   feature = "stm32f101",
@@ -66,6 +70,7 @@ use drone_stm32_map::reg::syscfg;
 use drone_stm32_map::thr::{
   IntExti0, IntExti1, IntExti1510, IntExti2, IntExti3, IntExti4, IntExti95,
 };
+use failure::Fail;
 use futures::prelude::*;
 
 /// Error returned from [`ExtiLn::stream`](ExtiLn::stream) on overflow.
@@ -175,7 +180,7 @@ impl<T: ExtiLnRes> ExtiLn<T> {
   /// `res` must be the only owner of its contained resources.
   #[inline(always)]
   pub unsafe fn new(res: T) -> Self {
-    ExtiLn(res)
+    Self(res)
   }
 
   /// Releases the underlying resources.

@@ -4,22 +4,13 @@
 #![feature(generators)]
 #![feature(never_type)]
 #![feature(prelude_import)]
+#![feature(uniform_paths)]
 #![no_std]
 #![warn(missing_docs)]
-#![allow(clippy::precedence)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::inline_always, clippy::module_name_repetitions)]
 #![cfg_attr(test, feature(allocator_api, allocator_internals))]
 #![cfg_attr(test, default_lib_allocator)]
-
-#[macro_use]
-extern crate drone_core;
-extern crate drone_cortex_m;
-extern crate drone_stm32_map;
-extern crate failure;
-#[macro_use]
-extern crate failure_derive;
-extern crate futures;
-#[cfg(test)]
-extern crate test;
 
 pub mod exti;
 pub mod gpio;
@@ -43,10 +34,7 @@ pub mod rtc;
 use drone_cortex_m::prelude::*;
 
 #[cfg(test)]
-use drone_core::heap;
-
-#[cfg(test)]
-heap! {
+drone_core::heap! {
   struct Heap;
   size = 0x40000;
   pools = [

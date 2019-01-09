@@ -15,12 +15,14 @@ use core::marker::PhantomData;
   feature = "stm32l4s9"
 ))]
 use core::ptr::read_volatile;
-use drone_core::bitfield::Bitfield;
-use drone_cortex_m::fib;
-use drone_cortex_m::reg::marker::*;
-use drone_cortex_m::reg::prelude::*;
-use drone_cortex_m::reg::{RegGuard, RegGuardCnt, RegGuardRes};
-use drone_cortex_m::thr::prelude::*;
+#[allow(unused_imports)]
+use drone_core::res_impl;
+use drone_core::{bitfield::Bitfield, res_decl};
+use drone_cortex_m::{
+  fib,
+  reg::{marker::*, prelude::*, RegGuard, RegGuardCnt, RegGuardRes},
+  thr::prelude::*,
+};
 use drone_stm32_drv_dma::dma::{DmaBond, DmaBondOnRgc};
 #[cfg(any(
   feature = "stm32l4r5",
@@ -387,7 +389,7 @@ where
   /// `res` must be the only owner of its contained resources.
   #[inline(always)]
   pub unsafe fn new(res: T, rgc: C) -> Self {
-    Adc(res, rgc)
+    Self(res, rgc)
   }
 
   /// Releases the underlying resources.
@@ -491,7 +493,7 @@ where
   /// `res` must be the only owner of its contained resources.
   #[inline(always)]
   pub unsafe fn new(res: AdcComRes, rgc: C) -> Self {
-    AdcCom(res, rgc, PhantomData)
+    Self(res, rgc, PhantomData)
   }
 
   /// Releases the underlying resources.
@@ -582,7 +584,7 @@ where
 impl<T: AdcRes> Clone for AdcOn<T> {
   #[inline(always)]
   fn clone(&self) -> Self {
-    AdcOn(self.0)
+    Self(self.0)
   }
 }
 
@@ -621,7 +623,7 @@ where
 {
   #[inline(always)]
   fn clone(&self) -> Self {
-    AdcCh18On(self.0, self.1.clone())
+    Self(self.0, self.1.clone())
   }
 }
 
@@ -672,7 +674,7 @@ where
 {
   #[inline(always)]
   fn clone(&self) -> Self {
-    AdcCh17On(self.0, self.1.clone())
+    Self(self.0, self.1.clone())
   }
 }
 
@@ -723,7 +725,7 @@ where
 {
   #[inline(always)]
   fn clone(&self) -> Self {
-    AdcVrefOn(self.0, self.1.clone())
+    Self(self.0, self.1.clone())
   }
 }
 
