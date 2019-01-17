@@ -1,10 +1,11 @@
 //! Drone for STM32. DMA driver.
 
+#![feature(futures_api)]
 #![feature(generators)]
 #![feature(marker_trait_attr)]
 #![feature(prelude_import)]
-#![feature(uniform_paths)]
 #![no_std]
+#![deny(bare_trait_objects)]
 #![warn(missing_docs)]
 #![warn(clippy::pedantic)]
 #![allow(

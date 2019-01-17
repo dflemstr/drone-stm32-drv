@@ -425,12 +425,12 @@ where
   }
 
   /// Returns a future, which resolves on ADC ready event.
-  pub fn ready(&self) -> impl Future<Item = (), Error = !> {
+  pub fn ready(&self) -> impl Future<Output = ()> {
     let adrdy = *self.0.isr_adrdy();
     self.0.int().add_future(fib::new(move || loop {
       if adrdy.read_bit() {
         adrdy.set_bit();
-        break Ok(());
+        break;
       }
       yield;
     }))

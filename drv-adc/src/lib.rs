@@ -1,10 +1,11 @@
 //! Drone for STM32. ADC driver.
 
+#![feature(futures_api)]
 #![feature(generators)]
 #![feature(never_type)]
 #![feature(prelude_import)]
-#![feature(uniform_paths)]
 #![no_std]
+#![deny(bare_trait_objects)]
 #![warn(missing_docs)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::inline_always, clippy::module_name_repetitions)]

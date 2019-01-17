@@ -715,7 +715,7 @@ where
   }
 
   /// Returns a future, which resolves on I2C error event.
-  pub fn transfer_error(&self) -> impl Future<Item = !, Error = I2CError> {
+  pub fn transfer_error(&self) -> impl Future<Output = I2CError> {
     let berr = *self.0.isr_berr();
     let ovr = *self.0.isr_ovr();
     let arlo = *self.0.isr_arlo();
@@ -731,34 +731,34 @@ where
     self.0.int_er().add_future(fib::new(move || loop {
       if berr.read_bit_band() {
         berrcf.set_bit_band();
-        break Err(I2CError::Berr);
+        break I2CError::Berr;
       }
       if ovr.read_bit_band() {
         ovrcf.set_bit_band();
-        break Err(I2CError::Ovr);
+        break I2CError::Ovr;
       }
       if arlo.read_bit_band() {
         arlocf.set_bit_band();
-        break Err(I2CError::Arlo);
+        break I2CError::Arlo;
       }
       if timeout.read_bit_band() {
         timoutcf.set_bit_band();
-        break Err(I2CError::Timeout);
+        break I2CError::Timeout;
       }
       if alert.read_bit_band() {
         alertcf.set_bit_band();
-        break Err(I2CError::Alert);
+        break I2CError::Alert;
       }
       if pecerr.read_bit_band() {
         peccf.set_bit_band();
-        break Err(I2CError::Pecerr);
+        break I2CError::Pecerr;
       }
       yield;
     }))
   }
 
   /// Returns a future, which resolves on I2C transfer failure event.
-  pub fn transfer_break(&self) -> impl Future<Item = !, Error = I2CBreak> {
+  pub fn transfer_break(&self) -> impl Future<Output = I2CBreak> {
     let nackf = *self.0.isr_nackf();
     let stopf = *self.0.isr_stopf();
     let nackcf = *self.0.icr_nackcf();
@@ -766,11 +766,11 @@ where
     self.0.int_ev().add_future(fib::new(move || loop {
       if nackf.read_bit_band() {
         nackcf.set_bit_band();
-        break Err(I2CBreak::Nack);
+        break I2CBreak::Nack;
       }
       if stopf.read_bit_band() {
         stopcf.set_bit_band();
-        break Err(I2CBreak::Stop);
+        break I2CBreak::Stop;
       }
       yield;
     }))

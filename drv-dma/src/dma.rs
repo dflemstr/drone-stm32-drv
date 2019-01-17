@@ -588,12 +588,12 @@ impl<T: DmaRes> Dma<T> {
   /// Returns a future, which resolves on DMA transfer complete event.
   pub fn transfer_complete(
     &self,
-  ) -> impl Future<Item = (), Error = DmaTransferError> {
+  ) -> impl Future<Output = Result<(), DmaTransferError>> {
     let teif = *self.0.isr_teif();
     let tcif = *self.0.isr_tcif();
     let cgif = *self.0.ifcr_cgif();
     let ctcif = *self.0.ifcr_ctcif();
-    self.0.int().add_future(fib::new(move || loop {
+    self.0.int().add_try_future(fib::new(move || loop {
       if teif.read_bit_band() {
         cgif.set_bit_band();
         break Err(DmaTransferError);
@@ -609,12 +609,12 @@ impl<T: DmaRes> Dma<T> {
   /// Returns a future, which resolves on DMA half transfer event.
   pub fn half_transfer(
     &self,
-  ) -> impl Future<Item = (), Error = DmaTransferError> {
+  ) -> impl Future<Output = Result<(), DmaTransferError>> {
     let teif = *self.0.isr_teif();
     let htif = *self.0.isr_htif();
     let cgif = *self.0.ifcr_cgif();
     let chtif = *self.0.ifcr_chtif();
-    self.0.int().add_future(fib::new(move || loop {
+    self.0.int().add_try_future(fib::new(move || loop {
       if teif.read_bit_band() {
         cgif.set_bit_band();
         break Err(DmaTransferError);

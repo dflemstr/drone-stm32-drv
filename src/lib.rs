@@ -1,6 +1,7 @@
 //! Drone for STM32. Drivers.
 
 #![no_std]
+#![deny(bare_trait_objects)]
 #![warn(missing_docs)]
 #![warn(clippy::pedantic)]
 

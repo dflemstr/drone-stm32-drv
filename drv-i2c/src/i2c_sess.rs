@@ -1,6 +1,10 @@
 //! I2C session.
 
 use crate::i2c::{I2CBreak, I2CDmaRxRes, I2CDmaTxRes, I2CError, I2COn, I2C};
+use core::{
+  pin::Pin,
+  task::{LocalWaker, Poll},
+};
 use drone_core::awt;
 use drone_cortex_m::{
   reg::{prelude::*, RegGuard, RegGuardCnt},
@@ -10,7 +14,7 @@ use drone_stm32_drv_dma::dma::{
   DmaBond, DmaBondOnRgc, DmaResCcr, DmaTransferError, DmaTxRes,
 };
 use failure::Fail;
-use futures::{future::Either, prelude::*};
+use futures::prelude::*;
 
 /// I2C session error.
 #[derive(Debug, Fail)]
@@ -55,6 +59,62 @@ where
   pub i2c_on: RegGuard<I2COn<I2CRes>, C>,
   pub dma_rx: DmaRxBond,
   pub dma_tx: DmaTxBond,
+}
+
+enum Output3<A, B, C>
+where
+  A: Future,
+  B: Future,
+  C: Future,
+{
+  A(A::Output, B, C),
+  B(A, B::Output, C),
+  C(A, B, C::Output),
+}
+
+struct Select3<A, B, C>(Option<(A, B, C)>)
+where
+  A: Future + Unpin,
+  B: Future + Unpin,
+  C: Future + Unpin;
+
+impl<A, B, C> Select3<A, B, C>
+where
+  A: Future + Unpin,
+  B: Future + Unpin,
+  C: Future + Unpin,
+{
+  fn new(a: A, b: B, c: C) -> Self {
+    Self(Some((a, b, c)))
+  }
+}
+
+impl<A, B, C> Future for Select3<A, B, C>
+where
+  A: Future + Unpin,
+  B: Future + Unpin,
+  C: Future + Unpin,
+{
+  type Output = Output3<A, B, C>;
+
+  fn poll(self: Pin<&mut Self>, lw: &LocalWaker) -> Poll<Self::Output> {
+    let select3 = self.get_mut();
+    let (mut a, mut b, mut c) =
+      select3.0.take().expect("cannot poll Select3 twice");
+    match Pin::new(&mut a).poll(lw) {
+      Poll::Ready(a) => Poll::Ready(Output3::A(a, b, c)),
+      Poll::Pending => match Pin::new(&mut b).poll(lw) {
+        Poll::Ready(b) => Poll::Ready(Output3::B(a, b, c)),
+        Poll::Pending => match Pin::new(&mut c).poll(lw) {
+          Poll::Ready(c) => Poll::Ready(Output3::C(a, b, c)),
+          Poll::Pending => {
+            select3.0 = Some((a, b, c));
+            Poll::Pending
+          }
+        },
+      },
+    }
+  }
 }
 
 #[allow(missing_docs)]
@@ -123,7 +183,7 @@ where
     slave_addr: u8,
     i2c_cr1_val: I2CRes::Cr1Val,
     i2c_cr2_val: I2CRes::Cr2Val,
-  ) -> impl Future<Item = (), Error = I2CSessError> + 'sess {
+  ) -> impl Future<Output = Result<(), I2CSessError>> + 'sess {
     self.read_impl(buf, slave_addr, i2c_cr1_val, i2c_cr2_val, false)
   }
 
@@ -138,7 +198,7 @@ where
     slave_addr: u8,
     i2c_cr1_val: I2CRes::Cr1Val,
     i2c_cr2_val: I2CRes::Cr2Val,
-  ) -> impl Future<Item = (), Error = I2CSessError> + 'sess {
+  ) -> impl Future<Output = Result<(), I2CSessError>> + 'sess {
     self.read_impl(buf, slave_addr, i2c_cr1_val, i2c_cr2_val, true)
   }
 
@@ -153,7 +213,7 @@ where
     slave_addr: u8,
     i2c_cr1_val: I2CRes::Cr1Val,
     i2c_cr2_val: I2CRes::Cr2Val,
-  ) -> impl Future<Item = (), Error = I2CSessError> + 'sess {
+  ) -> impl Future<Output = Result<(), I2CSessError>> + 'sess {
     self.write_impl(buf, slave_addr, i2c_cr1_val, i2c_cr2_val, false)
   }
 
@@ -168,7 +228,7 @@ where
     slave_addr: u8,
     i2c_cr1_val: I2CRes::Cr1Val,
     i2c_cr2_val: I2CRes::Cr2Val,
-  ) -> impl Future<Item = (), Error = I2CSessError> + 'sess {
+  ) -> impl Future<Output = Result<(), I2CSessError>> + 'sess {
     self.write_impl(buf, slave_addr, i2c_cr1_val, i2c_cr2_val, true)
   }
 
@@ -179,7 +239,7 @@ where
     mut i2c_cr1_val: I2CRes::Cr1Val,
     mut i2c_cr2_val: I2CRes::Cr2Val,
     autoend: bool,
-  ) -> impl Future<Item = (), Error = I2CSessError> + 'sess {
+  ) -> impl Future<Output = Result<(), I2CSessError>> + 'sess {
     if buf.len() > 255 {
       panic!("I2C session overflow");
     }
@@ -203,8 +263,8 @@ where
       let i2c_error = self.0.i2c.transfer_error();
       self.set_i2c_cr2(&mut i2c_cr2_val, slave_addr, autoend, buf.len(), false);
       self.0.i2c.cr2().store_val(i2c_cr2_val);
-      match awt!(dma_rx.select(i2c_break).select(i2c_error)) {
-        Ok(Either::Left((Either::Left(((), i2c_break)), i2c_error))) => {
+      match awt!(Select3::new(dma_rx, i2c_break, i2c_error)) {
+        Output3::A(Ok(()), i2c_break, i2c_error) => {
           drop(i2c_break);
           drop(i2c_error);
           self
@@ -217,7 +277,7 @@ where
           self.0.i2c.int_er().trigger();
           Ok(())
         }
-        Err(Either::Left((Either::Left((dma_rx, i2c_break)), i2c_error))) => {
+        Output3::A(Err(dma_rx), i2c_break, i2c_error) => {
           drop(i2c_break);
           drop(i2c_error);
           self
@@ -230,7 +290,7 @@ where
           self.0.i2c.int_er().trigger();
           Err(dma_rx.into())
         }
-        Err(Either::Left((Either::Right((i2c_break, dma_rx)), i2c_error))) => {
+        Output3::B(dma_rx, i2c_break, i2c_error) => {
           drop(dma_rx);
           drop(i2c_error);
           self
@@ -243,8 +303,9 @@ where
           self.0.i2c.int_er().trigger();
           Err(i2c_break.into())
         }
-        Err(Either::Right((i2c_error, rest))) => {
-          drop(rest);
+        Output3::C(dma_rx, i2c_break, i2c_error) => {
+          drop(dma_rx);
+          drop(i2c_break);
           self
             .0
             .dma_rx
@@ -266,7 +327,7 @@ where
     mut i2c_cr1_val: I2CRes::Cr1Val,
     mut i2c_cr2_val: I2CRes::Cr2Val,
     autoend: bool,
-  ) -> impl Future<Item = (), Error = I2CSessError> + 'sess {
+  ) -> impl Future<Output = Result<(), I2CSessError>> + 'sess {
     if buf.len() > 255 {
       panic!("I2C session overflow");
     }
@@ -290,8 +351,8 @@ where
       let i2c_error = self.0.i2c.transfer_error();
       self.set_i2c_cr2(&mut i2c_cr2_val, slave_addr, autoend, buf.len(), true);
       self.0.i2c.cr2().store_val(i2c_cr2_val);
-      match awt!(dma_tx.select(i2c_break).select(i2c_error)) {
-        Ok(Either::Left((Either::Left(((), i2c_break)), i2c_error))) => {
+      match awt!(Select3::new(dma_tx, i2c_break, i2c_error)) {
+        Output3::A(Ok(()), i2c_break, i2c_error) => {
           drop(i2c_break);
           drop(i2c_error);
           self
@@ -304,7 +365,7 @@ where
           self.0.i2c.int_er().trigger();
           Ok(())
         }
-        Err(Either::Left((Either::Left((dma_tx, i2c_break)), i2c_error))) => {
+        Output3::A(Err(dma_tx), i2c_break, i2c_error) => {
           drop(i2c_break);
           drop(i2c_error);
           self
@@ -317,7 +378,7 @@ where
           self.0.i2c.int_er().trigger();
           Err(dma_tx.into())
         }
-        Err(Either::Left((Either::Right((i2c_break, dma_tx)), i2c_error))) => {
+        Output3::B(dma_tx, i2c_break, i2c_error) => {
           drop(dma_tx);
           drop(i2c_error);
           self
@@ -330,8 +391,9 @@ where
           self.0.i2c.int_er().trigger();
           Err(i2c_break.into())
         }
-        Err(Either::Right((i2c_error, rest))) => {
-          drop(rest);
+        Output3::C(dma_tx, i2c_break, i2c_error) => {
+          drop(dma_tx);
+          drop(i2c_break);
           self
             .0
             .dma_tx

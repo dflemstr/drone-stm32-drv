@@ -192,13 +192,13 @@ impl<T: ExtiLnRes> ExtiLn<T> {
 
 impl<T: ExtiLnExtRes + ExtiLnConfRes> ExtiLn<T> {
   /// Returns a future, which resolves to `Ok(())` when the event is triggered.
-  pub fn add_future(&self) -> impl Future<Item = (), Error = !> {
+  pub fn add_future(&self) -> impl Future<Output = ()> {
     self.0.int().add_future(self.future_fib())
   }
 
   /// Returns a stream, which resolves to `Ok(())` each time the event is
   /// triggered. Resolves to `Err(ExtiLnOverflow)` on overflow.
-  pub fn add_stream(&self) -> impl Stream<Item = (), Error = ExtiLnOverflow> {
+  pub fn add_stream(&self) -> impl Stream<Item = Result<(), ExtiLnOverflow>> {
     self
       .0
       .int()
@@ -207,14 +207,13 @@ impl<T: ExtiLnExtRes + ExtiLnConfRes> ExtiLn<T> {
 
   /// Returns a stream, which resolves to `Ok(())` each time the event is
   /// triggered. Skips on overflow.
-  pub fn add_stream_skip(&self) -> impl Stream<Item = (), Error = !> {
+  pub fn add_stream_skip(&self) -> impl Stream<Item = ()> {
     self.0.int().add_stream_skip(self.stream_fib())
   }
 
-  fn stream_fib<E: Send>(
+  fn stream_fib<R>(
     &self,
-  ) -> impl Fiber<Input = (), Yield = Option<()>, Return = Result<Option<()>, E>>
-  {
+  ) -> impl Fiber<Input = (), Yield = Option<()>, Return = R> {
     let pif = *self.0.pr_pif();
     fib::new(move || loop {
       if pif.read_bit() {
@@ -225,14 +224,12 @@ impl<T: ExtiLnExtRes + ExtiLnConfRes> ExtiLn<T> {
     })
   }
 
-  fn future_fib<E: Send>(
-    &self,
-  ) -> impl Fiber<Input = (), Yield = (), Return = Result<(), E>> {
+  fn future_fib(&self) -> impl Fiber<Input = (), Yield = (), Return = ()> {
     let pif = *self.0.pr_pif();
     fib::new(move || loop {
       if pif.read_bit() {
         pif.set_bit();
-        break Ok(());
+        break;
       }
       yield;
     })

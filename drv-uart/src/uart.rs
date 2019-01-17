@@ -564,13 +564,13 @@ where
   }
 
   /// Returns a future, which resolves on transmission complete event.
-  pub fn transmission_complete(&self) -> impl Future<Item = (), Error = !> {
+  pub fn transmission_complete(&self) -> impl Future<Output = ()> {
     let tc = *self.0.isr_tc();
     let tcie = *self.0.cr1_tcie();
     self.0.int().add_future(fib::new(move || loop {
       if tc.read_bit_band() {
         tcie.clear_bit();
-        break Ok(());
+        break;
       }
       yield;
     }))
@@ -580,7 +580,7 @@ where
   pub fn rx_stream(
     &self,
     capacity: usize,
-  ) -> impl Stream<Item = u8, Error = UartRxOverflow> {
+  ) -> impl Stream<Item = Result<u8, UartRxOverflow>> {
     self.0.int().add_stream_ring(
       capacity,
       |_| Err(UartRxOverflow),
@@ -589,10 +589,7 @@ where
   }
 
   /// Returns a stream of bytes from the receiver.
-  pub fn rx_stream_skip(
-    &self,
-    capacity: usize,
-  ) -> impl Stream<Item = u8, Error = UartRxOverflow> {
+  pub fn rx_stream_skip(&self, capacity: usize) -> impl Stream<Item = u8> {
     self
       .0
       .int()
@@ -600,20 +597,16 @@ where
   }
 
   /// Returns a stream of bytes from the receiver.
-  pub fn rx_stream_overwrite(
-    &self,
-    capacity: usize,
-  ) -> impl Stream<Item = u8, Error = UartRxOverflow> {
+  pub fn rx_stream_overwrite(&self, capacity: usize) -> impl Stream<Item = u8> {
     self
       .0
       .int()
       .add_stream_ring_overwrite(capacity, self.rx_stream_fib())
   }
 
-  fn rx_stream_fib<E: Send>(
+  fn rx_stream_fib<R>(
     &self,
-  ) -> impl Fiber<Input = (), Yield = Option<u8>, Return = Result<Option<u8>, E>>
-  {
+  ) -> impl Fiber<Input = (), Yield = Option<u8>, Return = R> {
     let rxne = *self.0.isr_rxne();
     let rdr = *self.0.rdr();
     fib::new(move || loop {
