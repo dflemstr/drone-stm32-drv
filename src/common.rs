@@ -36,7 +36,7 @@ pub trait DrvClockSel {
 /// Driver DMA receiver.
 pub trait DrvDmaRx<Rx: DmaChMap> {
   /// Initializes peripheral address of the DMA channel to the receiver.
-  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Rtt>>);
+  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>);
 
   #[cfg(any(
     feature = "stm32l4r5",
@@ -49,7 +49,7 @@ pub trait DrvDmaRx<Rx: DmaChMap> {
   /// Initializes the DMA channel as a receiver.
   fn dma_rx_init(
     &self,
-    dma_rx: &DmaChEn<Rx, impl IntToken<Rtt>>,
+    dma_rx: &DmaChEn<Rx, impl IntToken<Att>>,
     dmamux_rx: &DmamuxChEn<Rx::DmamuxChMap>,
     rx_dma_req_id: u32,
   ) {
@@ -67,7 +67,7 @@ pub trait DrvDmaRx<Rx: DmaChMap> {
   /// Initializes the DMA channel as a receiver.
   fn dma_rx_init(
     &self,
-    dma_rx: &DmaChEn<Rx, impl IntToken<Rtt>>,
+    dma_rx: &DmaChEn<Rx, impl IntToken<Att>>,
     dma_rx_ch: u32,
   ) {
     self.dma_rx_paddr_init(dma_rx);
@@ -88,7 +88,7 @@ pub trait DrvDmaRx<Rx: DmaChMap> {
     feature = "stm32l4s9"
   )))]
   /// Initializes the DMA channel as a receiver.
-  fn dma_rx_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Rtt>>) {
+  fn dma_rx_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
     self.dma_rx_paddr_init(dma_rx);
   }
 }
@@ -96,7 +96,7 @@ pub trait DrvDmaRx<Rx: DmaChMap> {
 /// Driver DMA transmitter.
 pub trait DrvDmaTx<Tx: DmaChMap> {
   /// Initializes peripheral address of the DMA channel to the transmitter.
-  fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Rtt>>);
+  fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Att>>);
 
   #[cfg(any(
     feature = "stm32l4r5",
@@ -109,7 +109,7 @@ pub trait DrvDmaTx<Tx: DmaChMap> {
   /// Initializes the DMA channel as a transmitter.
   fn dma_tx_init(
     &self,
-    dma_tx: &DmaChEn<Tx, impl IntToken<Rtt>>,
+    dma_tx: &DmaChEn<Tx, impl IntToken<Att>>,
     dmamux_tx: &DmamuxChEn<Tx::DmamuxChMap>,
     tx_dma_req_id: u32,
   ) {
@@ -127,7 +127,7 @@ pub trait DrvDmaTx<Tx: DmaChMap> {
   /// Initializes the DMA channel as a transmitter.
   fn dma_tx_init(
     &self,
-    dma_tx: &DmaChEn<Tx, impl IntToken<Rtt>>,
+    dma_tx: &DmaChEn<Tx, impl IntToken<Att>>,
     dma_tx_ch: u32,
   ) {
     self.dma_tx_paddr_init(dma_tx);
@@ -148,7 +148,7 @@ pub trait DrvDmaTx<Tx: DmaChMap> {
     feature = "stm32l4s9"
   )))]
   /// Initializes the DMA channel as a transmitter.
-  fn dma_tx_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Rtt>>) {
+  fn dma_tx_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Att>>) {
     self.dma_tx_paddr_init(dma_tx);
   }
 }

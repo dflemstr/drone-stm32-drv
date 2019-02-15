@@ -24,13 +24,13 @@ pub struct DmamuxEnGuard<T: DmamuxMap>(PhantomData<T>);
 
 impl<T: DmamuxMap> Dmamux<T> {
   /// Creates a new [`Dmamux`].
-  #[inline(always)]
+  #[inline]
   pub fn new(periph: DmamuxPeriph<T>) -> Self {
     Self(DmamuxEn { periph })
   }
 
   /// Releases the peripheral.
-  #[inline(always)]
+  #[inline]
   pub fn free(self) -> DmamuxPeriph<T> {
     self.0.periph
   }

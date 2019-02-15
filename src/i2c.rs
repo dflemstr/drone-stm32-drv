@@ -67,12 +67,12 @@ pub enum I2CBreak {
 }
 
 /// I2C driver.
-pub struct I2C<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>>(
+pub struct I2C<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>>(
   I2CEn<T, Ev, Er>,
 );
 
 /// I2C enabled driver.
-pub struct I2CEn<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> {
+pub struct I2CEn<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> {
   periph: I2CDiverged<T>,
   int_ev: Ev,
   int_er: Er,
@@ -101,9 +101,9 @@ pub struct I2CDiverged<T: I2CMap> {
   pub i2c_txdr: T::SI2CTxdr,
 }
 
-impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2C<T, Ev, Er> {
+impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2C<T, Ev, Er> {
   /// Creates a new [`I2C`].
-  #[inline(always)]
+  #[inline]
   pub fn new(periph: I2CPeriph<T>, int_ev: Ev, int_er: Er) -> Self {
     let periph = I2CDiverged {
       rcc_apb1enr_i2cen: periph.rcc_apb1enr_i2cen,
@@ -116,8 +116,8 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2C<T, Ev, Er> {
       i2c_oar2: periph.i2c_oar2,
       i2c_timingr: periph.i2c_timingr,
       i2c_timeoutr: periph.i2c_timeoutr,
-      i2c_isr: periph.i2c_isr.to_copy(),
-      i2c_icr: periph.i2c_icr.to_copy(),
+      i2c_isr: periph.i2c_isr.into_copy(),
+      i2c_icr: periph.i2c_icr.into_copy(),
       i2c_pecr: periph.i2c_pecr,
       i2c_rxdr: periph.i2c_rxdr,
       i2c_txdr: periph.i2c_txdr,
@@ -134,7 +134,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2C<T, Ev, Er> {
   /// # Safety
   ///
   /// Some of the `Crt` register tokens can be still in use.
-  #[inline(always)]
+  #[inline]
   pub unsafe fn from_diverged(
     periph: I2CDiverged<T>,
     int_ev: Ev,
@@ -148,7 +148,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2C<T, Ev, Er> {
   }
 
   /// Releases the peripheral.
-  #[inline(always)]
+  #[inline]
   pub fn free(self) -> I2CDiverged<T> {
     self.0.periph
   }
@@ -164,7 +164,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2C<T, Ev, Er> {
   }
 }
 
-impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2CEn<T, Ev, Er> {
+impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
   /// Reads bytes to `buf` from `slave_addr`. Leaves the session open.
   ///
   /// # Panics
@@ -172,7 +172,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2CEn<T, Ev, Er> {
   /// If length of `buf` is greater than 255.
   pub fn read<'a, Rx: DmaChMap>(
     &'a self,
-    dma_rx: &'a DmaChEn<Rx, impl IntToken<Rtt>>,
+    dma_rx: &'a DmaChEn<Rx, impl IntToken<Att>>,
     buf: &'a mut [u8],
     slave_addr: u8,
     i2c_cr1_val: T::I2CCr1Val,
@@ -188,7 +188,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2CEn<T, Ev, Er> {
   /// If length of `buf` is greater than 255.
   pub fn read_and_stop<'a, Rx: DmaChMap>(
     &'a self,
-    dma_rx: &'a DmaChEn<Rx, impl IntToken<Rtt>>,
+    dma_rx: &'a DmaChEn<Rx, impl IntToken<Att>>,
     buf: &'a mut [u8],
     slave_addr: u8,
     i2c_cr1_val: T::I2CCr1Val,
@@ -204,7 +204,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2CEn<T, Ev, Er> {
   /// If length of `buf` is greater than 255.
   pub fn write<'a, Tx: DmaChMap>(
     &'a self,
-    dma_tx: &'a DmaChEn<Tx, impl IntToken<Rtt>>,
+    dma_tx: &'a DmaChEn<Tx, impl IntToken<Att>>,
     buf: &'a [u8],
     slave_addr: u8,
     i2c_cr1_val: T::I2CCr1Val,
@@ -220,7 +220,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2CEn<T, Ev, Er> {
   /// If length of `buf` is greater than 255.
   pub fn write_and_stop<'a, Tx: DmaChMap>(
     &'a self,
-    dma_tx: &'a DmaChEn<Tx, impl IntToken<Rtt>>,
+    dma_tx: &'a DmaChEn<Tx, impl IntToken<Att>>,
     buf: &'a [u8],
     slave_addr: u8,
     i2c_cr1_val: T::I2CCr1Val,
@@ -293,7 +293,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2CEn<T, Ev, Er> {
 
   fn read_impl<'a, Rx: DmaChMap>(
     &'a self,
-    dma_rx: &'a DmaChEn<Rx, impl IntToken<Rtt>>,
+    dma_rx: &'a DmaChEn<Rx, impl IntToken<Att>>,
     buf: &'a mut [u8],
     slave_addr: u8,
     mut i2c_cr1_val: T::I2CCr1Val,
@@ -362,7 +362,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2CEn<T, Ev, Er> {
 
   fn write_impl<'a, Tx: DmaChMap>(
     &'a self,
-    dma_tx: &'a DmaChEn<Tx, impl IntToken<Rtt>>,
+    dma_tx: &'a DmaChEn<Tx, impl IntToken<Att>>,
     buf: &'a [u8],
     slave_addr: u8,
     mut i2c_cr1_val: T::I2CCr1Val,
@@ -456,7 +456,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2CEn<T, Ev, Er> {
 
   fn init_dma_rx_ccr<Rx: DmaChMap>(
     &self,
-    dma_rx: &DmaChEn<Rx, impl IntToken<Rtt>>,
+    dma_rx: &DmaChEn<Rx, impl IntToken<Att>>,
   ) -> Rx::DmaCcrVal {
     let mut val = dma_rx.ccr().default_val();
     dma_rx.ccr().mem2mem().clear(&mut val);
@@ -475,7 +475,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2CEn<T, Ev, Er> {
 
   fn init_dma_tx_ccr<Tx: DmaChMap>(
     &self,
-    dma_tx: &DmaChEn<Tx, impl IntToken<Rtt>>,
+    dma_tx: &DmaChEn<Tx, impl IntToken<Att>>,
   ) -> Tx::DmaCcrVal {
     let mut val = dma_tx.ccr().default_val();
     dma_tx.ccr().mem2mem().clear(&mut val);
@@ -494,18 +494,18 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2CEn<T, Ev, Er> {
 }
 
 #[allow(missing_docs)]
-impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2CEn<T, Ev, Er> {
-  #[inline(always)]
+impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
+  #[inline]
   pub fn cr1(&self) -> &T::SI2CCr1 {
     &self.periph.i2c_cr1
   }
 
-  #[inline(always)]
+  #[inline]
   pub fn cr2(&self) -> &T::SI2CCr2 {
     &self.periph.i2c_cr2
   }
 
-  #[inline(always)]
+  #[inline]
   pub fn timingr(&self) -> &T::SI2CTimingr {
     &self.periph.i2c_timingr
   }
@@ -514,12 +514,12 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> I2CEn<T, Ev, Er> {
 impl<T, Ev, Er, Rx> DrvDmaRx<Rx> for I2C<T, Ev, Er>
 where
   T: I2CMap,
-  Ev: IntToken<Rtt>,
-  Er: IntToken<Rtt>,
+  Ev: IntToken<Att>,
+  Er: IntToken<Att>,
   Rx: DmaChMap,
 {
   #[inline]
-  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Rtt>>) {
+  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
     self.0.dma_rx_paddr_init(dma_rx);
   }
 }
@@ -527,12 +527,12 @@ where
 impl<T, Ev, Er, Tx> DrvDmaTx<Tx> for I2C<T, Ev, Er>
 where
   T: I2CMap,
-  Ev: IntToken<Rtt>,
-  Er: IntToken<Rtt>,
+  Ev: IntToken<Att>,
+  Er: IntToken<Att>,
   Tx: DmaChMap,
 {
   #[inline]
-  fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Rtt>>) {
+  fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Att>>) {
     self.0.dma_tx_paddr_init(dma_tx);
   }
 }
@@ -540,11 +540,11 @@ where
 impl<T, Ev, Er, Rx> DrvDmaRx<Rx> for I2CEn<T, Ev, Er>
 where
   T: I2CMap,
-  Ev: IntToken<Rtt>,
-  Er: IntToken<Rtt>,
+  Ev: IntToken<Att>,
+  Er: IntToken<Att>,
   Rx: DmaChMap,
 {
-  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Rtt>>) {
+  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
     unsafe { dma_rx.set_paddr(self.periph.i2c_rxdr.to_ptr()) };
   }
 }
@@ -552,16 +552,16 @@ where
 impl<T, Ev, Er, Tx> DrvDmaTx<Tx> for I2CEn<T, Ev, Er>
 where
   T: I2CMap,
-  Ev: IntToken<Rtt>,
-  Er: IntToken<Rtt>,
+  Ev: IntToken<Att>,
+  Er: IntToken<Att>,
   Tx: DmaChMap,
 {
-  fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Rtt>>) {
+  fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Att>>) {
     unsafe { dma_tx.set_paddr(self.periph.i2c_txdr.to_mut_ptr()) };
   }
 }
 
-impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> DrvRcc
+impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> DrvRcc
   for I2C<T, Ev, Er>
 {
   #[inline]
@@ -580,7 +580,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> DrvRcc
   }
 }
 
-impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> DrvRcc
+impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> DrvRcc
   for I2CEn<T, Ev, Er>
 {
   fn reset(&mut self) {
@@ -596,7 +596,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> DrvRcc
   }
 }
 
-impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> DrvClockSel
+impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> DrvClockSel
   for I2C<T, Ev, Er>
 {
   #[inline]
@@ -605,7 +605,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> DrvClockSel
   }
 }
 
-impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> DrvClockSel
+impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> DrvClockSel
   for I2CEn<T, Ev, Er>
 {
   fn clock_sel(&self, value: u32) {
@@ -613,7 +613,7 @@ impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>> DrvClockSel
   }
 }
 
-impl<T: I2CMap, Ev: IntToken<Rtt>, Er: IntToken<Rtt>>
+impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>>
   GuardHandler<I2CEn<T, Ev, Er>> for I2CEnGuard<T>
 {
   fn teardown(&mut self, i2c: &mut I2CEn<T, Ev, Er>) {

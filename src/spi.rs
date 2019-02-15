@@ -31,10 +31,10 @@ pub enum SpiError {
 }
 
 /// SPI driver.
-pub struct Spi<T: SpiMap, I: IntToken<Rtt>>(SpiEn<T, I>);
+pub struct Spi<T: SpiMap, I: IntToken<Att>>(SpiEn<T, I>);
 
 /// SPI enabled driver.
-pub struct SpiEn<T: SpiMap, I: IntToken<Rtt>> {
+pub struct SpiEn<T: SpiMap, I: IntToken<Att>> {
   periph: SpiDiverged<T>,
   int: I,
 }
@@ -57,9 +57,9 @@ pub struct SpiDiverged<T: SpiMap> {
   pub spi_txcrcr: T::SSpiTxcrcr,
 }
 
-impl<T: SpiMap, I: IntToken<Rtt>> Spi<T, I> {
+impl<T: SpiMap, I: IntToken<Att>> Spi<T, I> {
   /// Creates a new [`Spi`].
-  #[inline(always)]
+  #[inline]
   pub fn new(periph: SpiPeriph<T>, int: I) -> Self {
     let periph = SpiDiverged {
       rcc_apbenr_spien: periph.rcc_apbenr_spien,
@@ -68,7 +68,7 @@ impl<T: SpiMap, I: IntToken<Rtt>> Spi<T, I> {
       spi_cr1: periph.spi_cr1,
       spi_cr2: periph.spi_cr2,
       spi_crcpr: periph.spi_crcpr,
-      spi_dr: periph.spi_dr.to_copy(),
+      spi_dr: periph.spi_dr.into_copy(),
       spi_rxcrcr: periph.spi_rxcrcr,
       spi_sr: periph.spi_sr,
       spi_txcrcr: periph.spi_txcrcr,
@@ -81,13 +81,13 @@ impl<T: SpiMap, I: IntToken<Rtt>> Spi<T, I> {
   /// # Safety
   ///
   /// Some of the `Crt` register tokens can be still in use.
-  #[inline(always)]
+  #[inline]
   pub unsafe fn from_diverged(periph: SpiDiverged<T>, int: I) -> Self {
     Self(SpiEn { periph, int })
   }
 
   /// Releases the peripheral.
-  #[inline(always)]
+  #[inline]
   pub fn free(self) -> SpiDiverged<T> {
     self.0.periph
   }
@@ -109,7 +109,7 @@ impl<T: SpiMap, I: IntToken<Rtt>> Spi<T, I> {
   }
 }
 
-impl<T: SpiMap, I: IntToken<Rtt>> SpiEn<T, I> {
+impl<T: SpiMap, I: IntToken<Att>> SpiEn<T, I> {
   /// Disables SPI clock.
   pub fn into_disabled(self) -> Spi<T, I> {
     self.periph.rcc_apbenr_spien.clear_bit();
@@ -140,39 +140,39 @@ impl<T: SpiMap, I: IntToken<Rtt>> SpiEn<T, I> {
   }
 
   /// Writes a byte to the data register.
-  #[inline(always)]
+  #[inline]
   pub fn send_byte(&self, value: u8) {
     Self::dr_send_byte(&self.periph.spi_dr, value);
   }
 
   /// Returns a closure, which writes a byte to the data register.
-  #[inline(always)]
+  #[inline]
   pub fn send_byte_fn(&self) -> impl Fn(u8) {
     let dr = self.periph.spi_dr;
     move |value| Self::dr_send_byte(&dr, value)
   }
 
   /// Writes a half word to the data register.
-  #[inline(always)]
+  #[inline]
   pub fn send_hword(&self, value: u16) {
     Self::dr_send_hword(&self.periph.spi_dr, value);
   }
 
   /// Returns a closure, which writes a half word to the data register.
-  #[inline(always)]
+  #[inline]
   pub fn send_hword_fn(&self) -> impl Fn(u16) {
     let dr = self.periph.spi_dr;
     move |value| Self::dr_send_hword(&dr, value)
   }
 
   /// Reads a byte from the data register.
-  #[inline(always)]
+  #[inline]
   pub fn recv_byte(&self) -> u8 {
     unsafe { read_volatile(self.periph.spi_dr.to_ptr() as *const _) }
   }
 
   /// Reads a half word from the data register.
-  #[inline(always)]
+  #[inline]
   pub fn recv_hword(&self) -> u16 {
     unsafe { read_volatile(self.periph.spi_dr.to_ptr() as *const _) }
   }
@@ -197,67 +197,67 @@ impl<T: SpiMap, I: IntToken<Rtt>> SpiEn<T, I> {
     }
   }
 
-  #[inline(always)]
+  #[inline]
   fn dr_send_byte(dr: &T::CSpiDr, value: u8) {
     unsafe { write_volatile(dr.to_mut_ptr() as *mut _, value) };
   }
 
-  #[inline(always)]
+  #[inline]
   fn dr_send_hword(dr: &T::CSpiDr, value: u16) {
     unsafe { write_volatile(dr.to_mut_ptr() as *mut _, value) };
   }
 }
 
 #[allow(missing_docs)]
-impl<T: SpiMap, I: IntToken<Rtt>> SpiEn<T, I> {
-  #[inline(always)]
+impl<T: SpiMap, I: IntToken<Att>> SpiEn<T, I> {
+  #[inline]
   pub fn int(&self) -> &I {
     &self.int
   }
 
-  #[inline(always)]
+  #[inline]
   pub fn cr1(&self) -> &T::SSpiCr1 {
     &self.periph.spi_cr1
   }
 
-  #[inline(always)]
+  #[inline]
   pub fn cr2(&self) -> &T::SSpiCr2 {
     &self.periph.spi_cr2
   }
 
-  #[inline(always)]
+  #[inline]
   pub fn sr(&self) -> &T::SSpiSr {
     &self.periph.spi_sr
   }
 }
 
-impl<T: SpiMap, I: IntToken<Rtt>, Rx: DmaChMap> DrvDmaRx<Rx> for Spi<T, I> {
+impl<T: SpiMap, I: IntToken<Att>, Rx: DmaChMap> DrvDmaRx<Rx> for Spi<T, I> {
   #[inline]
-  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Rtt>>) {
+  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
     self.0.dma_rx_paddr_init(dma_rx);
   }
 }
 
-impl<T: SpiMap, I: IntToken<Rtt>, Tx: DmaChMap> DrvDmaTx<Tx> for Spi<T, I> {
+impl<T: SpiMap, I: IntToken<Att>, Tx: DmaChMap> DrvDmaTx<Tx> for Spi<T, I> {
   #[inline]
-  fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Rtt>>) {
+  fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Att>>) {
     self.0.dma_tx_paddr_init(dma_tx);
   }
 }
 
-impl<T: SpiMap, I: IntToken<Rtt>, Rx: DmaChMap> DrvDmaRx<Rx> for SpiEn<T, I> {
-  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Rtt>>) {
+impl<T: SpiMap, I: IntToken<Att>, Rx: DmaChMap> DrvDmaRx<Rx> for SpiEn<T, I> {
+  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
     unsafe { dma_rx.set_paddr(self.periph.spi_dr.to_ptr()) };
   }
 }
 
-impl<T: SpiMap, I: IntToken<Rtt>, Tx: DmaChMap> DrvDmaTx<Tx> for SpiEn<T, I> {
-  fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Rtt>>) {
+impl<T: SpiMap, I: IntToken<Att>, Tx: DmaChMap> DrvDmaTx<Tx> for SpiEn<T, I> {
+  fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Att>>) {
     unsafe { dma_tx.set_paddr(self.periph.spi_dr.to_mut_ptr()) };
   }
 }
 
-impl<T: SpiMap, I: IntToken<Rtt>> DrvRcc for Spi<T, I> {
+impl<T: SpiMap, I: IntToken<Att>> DrvRcc for Spi<T, I> {
   #[inline]
   fn reset(&mut self) {
     self.0.reset();
@@ -274,7 +274,7 @@ impl<T: SpiMap, I: IntToken<Rtt>> DrvRcc for Spi<T, I> {
   }
 }
 
-impl<T: SpiMap, I: IntToken<Rtt>> DrvRcc for SpiEn<T, I> {
+impl<T: SpiMap, I: IntToken<Att>> DrvRcc for SpiEn<T, I> {
   fn reset(&mut self) {
     self.periph.rcc_apbrstr_spirst.set_bit();
   }
@@ -288,7 +288,7 @@ impl<T: SpiMap, I: IntToken<Rtt>> DrvRcc for SpiEn<T, I> {
   }
 }
 
-impl<T: SpiMap, I: IntToken<Rtt>> GuardHandler<SpiEn<T, I>> for SpiEnGuard<T> {
+impl<T: SpiMap, I: IntToken<Att>> GuardHandler<SpiEn<T, I>> for SpiEnGuard<T> {
   fn teardown(&mut self, spi: &mut SpiEn<T, I>) {
     spi.periph.rcc_apbenr_spien.clear_bit()
   }

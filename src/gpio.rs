@@ -19,13 +19,13 @@ pub struct GpioHeadEnGuard<T: GpioHeadMap>(PhantomData<T>);
 
 impl<T: GpioHeadMap> GpioHead<T> {
   /// Creates a new [`GpioHead`].
-  #[inline(always)]
+  #[inline]
   pub fn new(periph: GpioHeadPeriph<T>) -> Self {
     Self(GpioHeadEn { periph })
   }
 
   /// Releases the peripheral.
-  #[inline(always)]
+  #[inline]
   pub fn free(self) -> GpioHeadPeriph<T> {
     self.0.periph
   }

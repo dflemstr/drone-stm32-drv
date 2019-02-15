@@ -10,7 +10,6 @@
 #![warn(clippy::pedantic)]
 #![allow(
   clippy::cast_possible_truncation,
-  clippy::inline_always,
   clippy::module_name_repetitions,
   clippy::similar_names
 )]
@@ -23,6 +22,7 @@ pub mod dma;
 pub mod gpio;
 pub mod i2c;
 pub mod spi;
+pub mod tim;
 pub mod uart;
 
 mod select3;

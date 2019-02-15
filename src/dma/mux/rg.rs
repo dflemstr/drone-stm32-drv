@@ -12,13 +12,13 @@ pub struct DmamuxRgEn<T: DmamuxRgMap> {
 
 impl<T: DmamuxRgMap> DmamuxRg<T> {
   /// Creates a new [`Dmamux`].
-  #[inline(always)]
+  #[inline]
   pub fn new(periph: DmamuxRgPeriph<T>) -> Self {
     Self(DmamuxRgEn { periph })
   }
 
   /// Releases the peripheral.
-  #[inline(always)]
+  #[inline]
   pub fn free(self) -> DmamuxRgPeriph<T> {
     self.0.periph
   }

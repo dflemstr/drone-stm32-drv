@@ -18,13 +18,13 @@ macro_rules! drv_adc_com {
 
 impl AdcCom {
   /// Creates a new [`AdcCom`].
-  #[inline(always)]
+  #[inline]
   pub fn new(periph: AdcComPeriph) -> Self {
     Self { periph }
   }
 
   /// Releases the peripheral.
-  #[inline(always)]
+  #[inline]
   pub fn free(self) -> AdcComPeriph {
     self.periph
   }

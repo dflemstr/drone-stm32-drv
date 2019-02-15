@@ -33,13 +33,13 @@ pub struct DmaEnGuard<T: DmaMap>(PhantomData<T>);
 
 impl<T: DmaMap> Dma<T> {
   /// Creates a new [`Dma`].
-  #[inline(always)]
+  #[inline]
   pub fn new(periph: DmaPeriph<T>) -> Self {
     Self(DmaEn { periph })
   }
 
   /// Releases the peripheral.
-  #[inline(always)]
+  #[inline]
   pub fn free(self) -> DmaPeriph<T> {
     self.0.periph
   }

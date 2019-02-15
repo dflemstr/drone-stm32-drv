@@ -11,10 +11,10 @@ use futures::prelude::*;
 pub struct DmaTransferError;
 
 /// DMA channel driver.
-pub struct DmaCh<T: DmaChMap, I: IntToken<Rtt>>(DmaChEn<T, I>);
+pub struct DmaCh<T: DmaChMap, I: IntToken<Att>>(DmaChEn<T, I>);
 
 /// DMA channel enabled driver.
-pub struct DmaChEn<T: DmaChMap, I: IntToken<Rtt>> {
+pub struct DmaChEn<T: DmaChMap, I: IntToken<Att>> {
   periph: DmaChDiverged<T>,
   int: I,
 }
@@ -44,9 +44,9 @@ pub struct DmaChDiverged<T: DmaChMap> {
   pub dma_isr_teif: T::CDmaIsrTeif,
 }
 
-impl<T: DmaChMap, I: IntToken<Rtt>> DmaCh<T, I> {
+impl<T: DmaChMap, I: IntToken<Att>> DmaCh<T, I> {
   /// Creates a new [`Dma`].
-  #[inline(always)]
+  #[inline]
   pub fn new(periph: DmaChPeriph<T>, int: I) -> Self {
     let periph = DmaChDiverged {
       dma_ccr: periph.dma_ccr,
@@ -61,14 +61,14 @@ impl<T: DmaChMap, I: IntToken<Rtt>> DmaCh<T, I> {
         feature = "stm32l4x6"
       ))]
       dma_cselr_cs: periph.dma_cselr_cs,
-      dma_ifcr_cgif: periph.dma_ifcr_cgif.to_copy(),
-      dma_ifcr_chtif: periph.dma_ifcr_chtif.to_copy(),
-      dma_ifcr_ctcif: periph.dma_ifcr_ctcif.to_copy(),
+      dma_ifcr_cgif: periph.dma_ifcr_cgif.into_copy(),
+      dma_ifcr_chtif: periph.dma_ifcr_chtif.into_copy(),
+      dma_ifcr_ctcif: periph.dma_ifcr_ctcif.into_copy(),
       dma_ifcr_cteif: periph.dma_ifcr_cteif,
       dma_isr_gif: periph.dma_isr_gif,
-      dma_isr_htif: periph.dma_isr_htif.to_copy(),
-      dma_isr_tcif: periph.dma_isr_tcif.to_copy(),
-      dma_isr_teif: periph.dma_isr_teif.to_copy(),
+      dma_isr_htif: periph.dma_isr_htif.into_copy(),
+      dma_isr_tcif: periph.dma_isr_tcif.into_copy(),
+      dma_isr_teif: periph.dma_isr_teif.into_copy(),
     };
     Self(DmaChEn { periph, int })
   }
@@ -78,13 +78,13 @@ impl<T: DmaChMap, I: IntToken<Rtt>> DmaCh<T, I> {
   /// # Safety
   ///
   /// Some of the `Crt` register tokens can be still in use.
-  #[inline(always)]
+  #[inline]
   pub unsafe fn from_diverged(periph: DmaChDiverged<T>, int: I) -> Self {
     Self(DmaChEn { periph, int })
   }
 
   /// Releases the peripheral.
-  #[inline(always)]
+  #[inline]
   pub fn free(self) -> DmaChDiverged<T> {
     self.0.periph
   }
@@ -119,7 +119,7 @@ impl<T: DmaChMap, I: IntToken<Rtt>> DmaCh<T, I> {
   }
 }
 
-impl<T: DmaChMap, I: IntToken<Rtt>> DmaChEn<T, I> {
+impl<T: DmaChMap, I: IntToken<Att>> DmaChEn<T, I> {
   /// Releases the enabled state.
   #[inline]
   pub fn into_disabled(
@@ -226,13 +226,13 @@ impl<T: DmaChMap, I: IntToken<Rtt>> DmaChEn<T, I> {
 }
 
 #[allow(missing_docs)]
-impl<T: DmaChMap, I: IntToken<Rtt>> DmaChEn<T, I> {
-  #[inline(always)]
+impl<T: DmaChMap, I: IntToken<Att>> DmaChEn<T, I> {
+  #[inline]
   pub fn int(&self) -> &I {
     &self.int
   }
 
-  #[inline(always)]
+  #[inline]
   pub fn ccr(&self) -> &T::SDmaCcr {
     &self.periph.dma_ccr
   }

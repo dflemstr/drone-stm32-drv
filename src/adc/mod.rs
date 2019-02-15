@@ -90,14 +90,14 @@ pub struct AdcDiverged<T: AdcMap> {
 
 impl<T: AdcMap, I: IntToken<Att>> Adc<T, I> {
   /// Creates a new [`Adc`].
-  #[inline(always)]
+  #[inline]
   pub fn new(periph: AdcPeriph<T>, int: I) -> Self {
     let periph = AdcDiverged {
       rcc_ahb2enr_adcen: periph.rcc_ahb2enr_adcen,
       rcc_ahb2rstr_adcrst: periph.rcc_ahb2rstr_adcrst,
       rcc_ahb2smenr_adcsmen: periph.rcc_ahb2smenr_adcsmen,
       rcc_ccipr_adcsel: periph.rcc_ccipr_adcsel,
-      adc_isr: periph.adc_isr.to_copy(),
+      adc_isr: periph.adc_isr.into_copy(),
       adc_ier: periph.adc_ier,
       adc_cr: periph.adc_cr,
       adc_cfgr: periph.adc_cfgr,
@@ -134,13 +134,13 @@ impl<T: AdcMap, I: IntToken<Att>> Adc<T, I> {
   /// # Safety
   ///
   /// Some of the `Crt` register tokens can be still in use.
-  #[inline(always)]
+  #[inline]
   pub unsafe fn from_diverged(periph: AdcDiverged<T>, int: I) -> Self {
     Self(AdcEn { periph, int })
   }
 
   /// Releases the peripheral.
-  #[inline(always)]
+  #[inline]
   pub fn free(self) -> AdcDiverged<T> {
     self.0.periph
   }
@@ -172,37 +172,37 @@ impl<T: AdcMap, I: IntToken<Att>> AdcEn<T, I> {
 
 #[allow(missing_docs)]
 impl<T: AdcMap, I: IntToken<Att>> AdcEn<T, I> {
-  #[inline(always)]
+  #[inline]
   pub fn int(&self) -> &I {
     &self.int
   }
 
-  #[inline(always)]
+  #[inline]
   pub fn ier(&self) -> &T::SAdcIer {
     &self.periph.adc_ier
   }
 
-  #[inline(always)]
+  #[inline]
   pub fn cfgr(&self) -> &T::SAdcCfgr {
     &self.periph.adc_cfgr
   }
 
-  #[inline(always)]
+  #[inline]
   pub fn cr(&self) -> &T::SAdcCr {
     &self.periph.adc_cr
   }
 
-  #[inline(always)]
+  #[inline]
   pub fn smpr1(&self) -> &T::SAdcSmpr1 {
     &self.periph.adc_smpr1
   }
 
-  #[inline(always)]
+  #[inline]
   pub fn smpr2(&self) -> &T::SAdcSmpr2 {
     &self.periph.adc_smpr2
   }
 
-  #[inline(always)]
+  #[inline]
   pub fn sqr1(&self) -> &T::SAdcSqr1 {
     &self.periph.adc_sqr1
   }
@@ -210,13 +210,13 @@ impl<T: AdcMap, I: IntToken<Att>> AdcEn<T, I> {
 
 impl<T: AdcMap, I: IntToken<Att>, Rx: DmaChMap> DrvDmaRx<Rx> for Adc<T, I> {
   #[inline]
-  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Rtt>>) {
+  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
     self.0.dma_rx_paddr_init(dma_rx);
   }
 }
 
 impl<T: AdcMap, I: IntToken<Att>, Rx: DmaChMap> DrvDmaRx<Rx> for AdcEn<T, I> {
-  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Rtt>>) {
+  fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
     unsafe { dma_rx.set_paddr(self.periph.adc_dr.to_ptr()) };
   }
 }

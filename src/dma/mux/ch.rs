@@ -15,13 +15,13 @@ pub struct DmamuxChEn<T: DmamuxChMap> {
 
 impl<T: DmamuxChMap> DmamuxCh<T> {
   /// Creates a new [`Dmamux`].
-  #[inline(always)]
+  #[inline]
   pub fn new(periph: DmamuxChPeriph<T>) -> Self {
     Self(DmamuxChEn { periph })
   }
 
   /// Releases the peripheral.
-  #[inline(always)]
+  #[inline]
   pub fn free(self) -> DmamuxChPeriph<T> {
     self.0.periph
   }
