@@ -39,6 +39,20 @@ impl<T: GpioHeadMap> GpioHead<T> {
     gpioen.set_bit();
     Guard::new(&mut self.0, GpioHeadEnGuard(PhantomData))
   }
+
+  /// Enables the port clock.
+  pub fn into_enabled(self) -> GpioHeadEn<T> {
+    self.0.periph.rcc_ahb2enr_gpioen.set_bit();
+    self.0
+  }
+}
+
+impl<T: GpioHeadMap> GpioHeadEn<T> {
+  /// Disables the port clock.
+  pub fn into_disabled(self) -> GpioHead<T> {
+    self.periph.rcc_ahb2enr_gpioen.clear_bit();
+    GpioHead(self)
+  }
 }
 
 impl<T: GpioHeadMap> DrvRcc for GpioHead<T> {
