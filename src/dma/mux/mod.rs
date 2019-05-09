@@ -44,6 +44,12 @@ impl<T: DmamuxMap> Dmamux<T> {
     dmamuxen.set_bit();
     Guard::new(&mut self.0, DmamuxEnGuard(PhantomData))
   }
+
+  /// Enables DMAMUX clock.
+  pub fn into_enabled(self) -> DmamuxEn<T> {
+    self.0.periph.rcc_ahb1enr_dmamuxen.set_bit();
+    self.0
+  }
 }
 
 impl<T: DmamuxMap> DrvRcc for Dmamux<T> {
@@ -60,6 +66,14 @@ impl<T: DmamuxMap> DrvRcc for Dmamux<T> {
   #[inline]
   fn enable_stop_mode(&self) {
     self.0.enable_stop_mode();
+  }
+}
+
+impl<T: DmamuxMap> DmamuxEn<T> {
+  /// Disables DMAMUX clock.
+  pub fn into_disabled(self) -> Dmamux<T> {
+    self.periph.rcc_ahb1enr_dmamuxen.clear_bit();
+    Dmamux(self)
   }
 }
 

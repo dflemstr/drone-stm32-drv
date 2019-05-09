@@ -1,6 +1,6 @@
 use core::{
   pin::Pin,
-  task::{Poll, Waker},
+  task::{Context, Poll},
 };
 use futures::prelude::*;
 
@@ -40,15 +40,15 @@ where
 {
   type Output = Output3<A, B, C>;
 
-  fn poll(self: Pin<&mut Self>, waker: &Waker) -> Poll<Self::Output> {
+  fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
     let select3 = self.get_mut();
     let (mut a, mut b, mut c) =
       select3.0.take().expect("cannot poll Select3 twice");
-    match Pin::new(&mut a).poll(waker) {
+    match Pin::new(&mut a).poll(cx) {
       Poll::Ready(a) => Poll::Ready(Output3::A(a, b, c)),
-      Poll::Pending => match Pin::new(&mut b).poll(waker) {
+      Poll::Pending => match Pin::new(&mut b).poll(cx) {
         Poll::Ready(b) => Poll::Ready(Output3::B(a, b, c)),
-        Poll::Pending => match Pin::new(&mut c).poll(waker) {
+        Poll::Pending => match Pin::new(&mut c).poll(cx) {
           Poll::Ready(c) => Poll::Ready(Output3::C(a, b, c)),
           Poll::Pending => {
             select3.0 = Some((a, b, c));

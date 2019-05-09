@@ -98,12 +98,14 @@ impl<T: BasicTimMap> TimDiverged for BasicTimDiverged<T> {
     int: I,
   ) -> TimerSleep<'_, Self> {
     let uif = *self.tim_sr.uif();
-    let future = Box::pin(int.add_future(fib::new(move || loop {
-      if uif.read_bit() {
-        uif.clear_bit();
-        break;
+    let future = Box::pin(int.add_future(fib::new(move || {
+      loop {
+        if uif.read_bit() {
+          uif.clear_bit();
+          break;
+        }
+        yield;
       }
-      yield;
     })));
     self.schedule(duration, |mut val| {
       self.tim_cr1.opm().set(&mut val);
@@ -150,12 +152,14 @@ impl<T: BasicTimMap> BasicTimDiverged<T> {
   fn interval_fib<R>(
     uif: T::CTimSrUif,
   ) -> impl Fiber<Input = (), Yield = Option<()>, Return = R> {
-    fib::new(move || loop {
-      if uif.read_bit() {
-        uif.set_bit();
-        yield Some(());
+    fib::new(move || {
+      loop {
+        if uif.read_bit() {
+          uif.set_bit();
+          yield Some(());
+        }
+        yield None;
       }
-      yield None;
     })
   }
 

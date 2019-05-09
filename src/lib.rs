@@ -1,7 +1,6 @@
 //! Drone for STM32. Drivers.
 
 #![feature(generators)]
-#![feature(futures_api)]
 #![feature(prelude_import)]
 #![no_std]
 #![deny(bare_trait_objects)]

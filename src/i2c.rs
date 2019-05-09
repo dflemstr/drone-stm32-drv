@@ -162,9 +162,21 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2C<T, Ev, Er> {
     i2cen.set_bit();
     Guard::new(&mut self.0, I2CEnGuard(PhantomData))
   }
+
+  /// Enables I2C clock.
+  pub fn into_enabled(self) -> I2CEn<T, Ev, Er> {
+    self.0.periph.rcc_apb1enr_i2cen.set_bit();
+    self.0
+  }
 }
 
 impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
+  /// Disables I2C clock.
+  pub fn into_disabled(self) -> I2C<T, Ev, Er> {
+    self.periph.rcc_apb1enr_i2cen.clear_bit();
+    I2C(self)
+  }
+
   /// Reads bytes to `buf` from `slave_addr`. Leaves the session open.
   ///
   /// # Panics
@@ -243,32 +255,34 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
     let timoutcf = *self.periph.i2c_icr.timoutcf();
     let alertcf = *self.periph.i2c_icr.alertcf();
     let peccf = *self.periph.i2c_icr.peccf();
-    self.int_er.add_future(fib::new(move || loop {
-      if berr.read_bit_band() {
-        berrcf.set_bit_band();
-        break I2CError::Berr;
+    self.int_er.add_future(fib::new(move || {
+      loop {
+        if berr.read_bit_band() {
+          berrcf.set_bit_band();
+          break I2CError::Berr;
+        }
+        if ovr.read_bit_band() {
+          ovrcf.set_bit_band();
+          break I2CError::Ovr;
+        }
+        if arlo.read_bit_band() {
+          arlocf.set_bit_band();
+          break I2CError::Arlo;
+        }
+        if timeout.read_bit_band() {
+          timoutcf.set_bit_band();
+          break I2CError::Timeout;
+        }
+        if alert.read_bit_band() {
+          alertcf.set_bit_band();
+          break I2CError::Alert;
+        }
+        if pecerr.read_bit_band() {
+          peccf.set_bit_band();
+          break I2CError::Pecerr;
+        }
+        yield;
       }
-      if ovr.read_bit_band() {
-        ovrcf.set_bit_band();
-        break I2CError::Ovr;
-      }
-      if arlo.read_bit_band() {
-        arlocf.set_bit_band();
-        break I2CError::Arlo;
-      }
-      if timeout.read_bit_band() {
-        timoutcf.set_bit_band();
-        break I2CError::Timeout;
-      }
-      if alert.read_bit_band() {
-        alertcf.set_bit_band();
-        break I2CError::Alert;
-      }
-      if pecerr.read_bit_band() {
-        peccf.set_bit_band();
-        break I2CError::Pecerr;
-      }
-      yield;
     }))
   }
 
@@ -278,16 +292,18 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
     let stopf = *self.periph.i2c_isr.stopf();
     let nackcf = *self.periph.i2c_icr.nackcf();
     let stopcf = *self.periph.i2c_icr.stopcf();
-    self.int_ev.add_future(fib::new(move || loop {
-      if nackf.read_bit_band() {
-        nackcf.set_bit_band();
-        break I2CBreak::Nack;
+    self.int_ev.add_future(fib::new(move || {
+      loop {
+        if nackf.read_bit_band() {
+          nackcf.set_bit_band();
+          break I2CBreak::Nack;
+        }
+        if stopf.read_bit_band() {
+          stopcf.set_bit_band();
+          break I2CBreak::Stop;
+        }
+        yield;
       }
-      if stopf.read_bit_band() {
-        stopcf.set_bit_band();
-        break I2CBreak::Stop;
-      }
-      yield;
     }))
   }
 

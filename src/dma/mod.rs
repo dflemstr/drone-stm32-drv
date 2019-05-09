@@ -53,6 +53,12 @@ impl<T: DmaMap> Dma<T> {
     dmaen.set_bit();
     Guard::new(&mut self.0, DmaEnGuard(PhantomData))
   }
+
+  /// Enables DMA clock.
+  pub fn into_enabled(self) -> DmaEn<T> {
+    self.0.periph.rcc_ahb1enr_dmaen.set_bit();
+    self.0
+  }
 }
 
 impl<T: DmaMap> DrvRcc for Dma<T> {
@@ -69,6 +75,14 @@ impl<T: DmaMap> DrvRcc for Dma<T> {
   #[inline]
   fn enable_stop_mode(&self) {
     self.0.enable_stop_mode();
+  }
+}
+
+impl<T: DmaMap> DmaEn<T> {
+  /// Disables DMA clock.
+  pub fn into_disabled(self) -> Dma<T> {
+    self.periph.rcc_ahb1enr_dmaen.clear_bit();
+    Dma(self)
   }
 }
 

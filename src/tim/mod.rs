@@ -121,9 +121,21 @@ impl<T: TimPeriph, I: IntToken<Att>> Tim<T, I> {
     timen.set_bit();
     Guard::new(&mut self.0, TimEnGuard(PhantomData))
   }
+
+  /// Enables timer clock.
+  pub fn into_enabled(self) -> TimEn<T, I> {
+    self.0.periph.rcc_apbenr_timen().set_bit();
+    self.0
+  }
 }
 
 impl<T: TimPeriph, I: IntToken<Att>> TimEn<T, I> {
+  /// Disables timer clock.
+  pub fn into_disabled(self) -> Tim<T, I> {
+    self.periph.rcc_apbenr_timen().clear_bit();
+    Tim(self)
+  }
+
   /// Sets the counter clock prescaler.
   pub fn presc(&mut self, value: u16) {
     self.periph.presc(value);

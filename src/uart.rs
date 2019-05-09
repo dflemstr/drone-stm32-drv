@@ -104,19 +104,33 @@ impl<T: UartMap, I: IntToken<Att>> Uart<T, I> {
     uarten.set_bit();
     Guard::new(&mut self.0, UartEnGuard(PhantomData))
   }
+
+  /// Enables UART clock.
+  pub fn into_enabled(self) -> UartEn<T, I> {
+    self.0.periph.rcc_apbenr_uarten.set_bit();
+    self.0
+  }
 }
 
 impl<T: UartMap, I: IntToken<Att>> UartEn<T, I> {
+  /// Disables UART clock.
+  pub fn into_disabled(self) -> Uart<T, I> {
+    self.periph.rcc_apbenr_uarten.clear_bit();
+    Uart(self)
+  }
+
   /// Returns a future, which resolves on transmission complete event.
   pub fn transmission_complete(&self) -> impl Future<Output = ()> {
     let tc = *self.periph.uart_isr.tc();
     let tcie = *self.periph.uart_cr1.tcie();
-    self.int.add_future(fib::new(move || loop {
-      if tc.read_bit_band() {
-        tcie.clear_bit();
-        break;
+    self.int.add_future(fib::new(move || {
+      loop {
+        if tc.read_bit_band() {
+          tcie.clear_bit();
+          break;
+        }
+        yield;
       }
-      yield;
     }))
   }
 
@@ -147,12 +161,14 @@ impl<T: UartMap, I: IntToken<Att>> UartEn<T, I> {
   ) -> impl Fiber<Input = (), Yield = Option<u8>, Return = R> {
     let rxne = *self.periph.uart_isr.rxne();
     let rdr = self.periph.uart_rdr;
-    fib::new(move || loop {
-      if rxne.read_bit_band() {
-        let byte = unsafe { read_volatile(rdr.to_ptr() as *const _) };
-        yield Some(byte);
+    fib::new(move || {
+      loop {
+        if rxne.read_bit_band() {
+          let byte = unsafe { read_volatile(rdr.to_ptr() as *const _) };
+          yield Some(byte);
+        }
+        yield None;
       }
-      yield None;
     })
   }
 }

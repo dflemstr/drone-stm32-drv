@@ -154,18 +154,32 @@ impl<T: AdcMap, I: IntToken<Att>> Adc<T, I> {
     adcen.set_bit();
     Guard::new(&mut self.0, AdcEnGuard(PhantomData))
   }
+
+  /// Enables ADC clock.
+  pub fn into_enabled(self) -> AdcEn<T, I> {
+    self.0.periph.rcc_ahb2enr_adcen.set_bit();
+    self.0
+  }
 }
 
 impl<T: AdcMap, I: IntToken<Att>> AdcEn<T, I> {
+  /// Disables ADC clock.
+  pub fn into_disabled(self) -> Adc<T, I> {
+    self.periph.rcc_ahb2enr_adcen.clear_bit();
+    Adc(self)
+  }
+
   /// Returns a future, which resolves on ADC ready event.
   pub fn ready(&self) -> impl Future<Output = ()> {
     let adrdy = *self.periph.adc_isr.adrdy();
-    self.int.add_future(fib::new(move || loop {
-      if adrdy.read_bit() {
-        adrdy.set_bit();
-        break;
+    self.int.add_future(fib::new(move || {
+      loop {
+        if adrdy.read_bit() {
+          adrdy.set_bit();
+          break;
+        }
+        yield;
       }
-      yield;
     }))
   }
 }

@@ -190,16 +190,18 @@ impl<T: DmaChMap, I: IntToken<Att>> DmaChEn<T, I> {
     let tcif = self.periph.dma_isr_tcif;
     let cgif = self.periph.dma_ifcr_cgif;
     let ctcif = self.periph.dma_ifcr_ctcif;
-    self.int.add_try_future(fib::new(move || loop {
-      if teif.read_bit_band() {
-        cgif.set_bit_band();
-        break Err(DmaTransferError);
+    self.int.add_try_future(fib::new(move || {
+      loop {
+        if teif.read_bit_band() {
+          cgif.set_bit_band();
+          break Err(DmaTransferError);
+        }
+        if tcif.read_bit_band() {
+          ctcif.set_bit_band();
+          break Ok(());
+        }
+        yield;
       }
-      if tcif.read_bit_band() {
-        ctcif.set_bit_band();
-        break Ok(());
-      }
-      yield;
     }))
   }
 
@@ -211,16 +213,18 @@ impl<T: DmaChMap, I: IntToken<Att>> DmaChEn<T, I> {
     let htif = self.periph.dma_isr_htif;
     let cgif = self.periph.dma_ifcr_cgif;
     let chtif = self.periph.dma_ifcr_chtif;
-    self.int.add_try_future(fib::new(move || loop {
-      if teif.read_bit_band() {
-        cgif.set_bit_band();
-        break Err(DmaTransferError);
+    self.int.add_try_future(fib::new(move || {
+      loop {
+        if teif.read_bit_band() {
+          cgif.set_bit_band();
+          break Err(DmaTransferError);
+        }
+        if htif.read_bit_band() {
+          chtif.set_bit_band();
+          break Ok(());
+        }
+        yield;
       }
-      if htif.read_bit_band() {
-        chtif.set_bit_band();
-        break Ok(());
-      }
-      yield;
     }))
   }
 }
