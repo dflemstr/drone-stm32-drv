@@ -5,10 +5,9 @@ use crate::{
   dma::{DmaChEn, DmaTransferError},
   select3::{Output3, Select3},
 };
-use core::marker::PhantomData;
 use drone_core::{
   awt,
-  shared_guard::{Guard, GuardHandler},
+  inventory::{Inventory0, InventoryGuard, InventoryResource},
 };
 use drone_cortex_m::{fib, reg::prelude::*, thr::prelude::*};
 use drone_stm32_map::periph::{
@@ -68,7 +67,7 @@ pub enum I2CBreak {
 
 /// I2C driver.
 pub struct I2C<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>>(
-  I2CEn<T, Ev, Er>,
+  Inventory0<I2CEn<T, Ev, Er>>,
 );
 
 /// I2C enabled driver.
@@ -77,9 +76,6 @@ pub struct I2CEn<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> {
   int_ev: Ev,
   int_er: Er,
 }
-
-/// I2C enabled guard handler.
-pub struct I2CEnGuard<T: I2CMap>(PhantomData<T>);
 
 /// I2C diverged peripheral.
 #[allow(missing_docs)]
@@ -122,11 +118,11 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2C<T, Ev, Er> {
       i2c_rxdr: periph.i2c_rxdr,
       i2c_txdr: periph.i2c_txdr,
     };
-    Self(I2CEn {
+    Self(Inventory0::new(I2CEn {
       periph,
       int_ev,
       int_er,
-    })
+    }))
   }
 
   /// Creates a new [`I2C`].
@@ -140,43 +136,47 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2C<T, Ev, Er> {
     int_ev: Ev,
     int_er: Er,
   ) -> Self {
-    Self(I2CEn {
+    Self(Inventory0::new(I2CEn {
       periph,
       int_ev,
       int_er,
-    })
+    }))
   }
 
   /// Releases the peripheral.
   #[inline]
   pub fn free(self) -> I2CDiverged<T> {
-    self.0.periph
+    self.0.free().periph
   }
 
   /// Enables I2C clock.
-  pub fn enable(&mut self) -> Guard<'_, I2CEn<T, Ev, Er>, I2CEnGuard<T>> {
+  pub fn enable(&mut self) -> InventoryGuard<'_, I2CEn<T, Ev, Er>> {
+    self.setup();
+    self.0.guard()
+  }
+
+  /// Enables I2C clock.
+  pub fn into_enabled(self) -> Inventory0<I2CEn<T, Ev, Er>> {
+    self.setup();
+    self.0
+  }
+
+  /// Disables I2C clock.
+  pub fn from_enabled(mut enabled: Inventory0<I2CEn<T, Ev, Er>>) -> Self {
+    enabled.teardown();
+    Self(enabled)
+  }
+
+  fn setup(&self) {
     let i2cen = &self.0.periph.rcc_apb1enr_i2cen;
     if i2cen.read_bit() {
       panic!("I2C wasn't turned off");
     }
     i2cen.set_bit();
-    Guard::new(&mut self.0, I2CEnGuard(PhantomData))
-  }
-
-  /// Enables I2C clock.
-  pub fn into_enabled(self) -> I2CEn<T, Ev, Er> {
-    self.0.periph.rcc_apb1enr_i2cen.set_bit();
-    self.0
   }
 }
 
 impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
-  /// Disables I2C clock.
-  pub fn into_disabled(self) -> I2C<T, Ev, Er> {
-    self.periph.rcc_apb1enr_i2cen.clear_bit();
-    I2C(self)
-  }
-
   /// Reads bytes to `buf` from `slave_addr`. Leaves the session open.
   ///
   /// # Panics
@@ -527,6 +527,14 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
   }
 }
 
+impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> InventoryResource
+  for I2CEn<T, Ev, Er>
+{
+  fn teardown(&mut self) {
+    self.periph.rcc_apb1enr_i2cen.clear_bit()
+  }
+}
+
 impl<T, Ev, Er, Rx> DrvDmaRx<Rx> for I2C<T, Ev, Er>
 where
   T: I2CMap,
@@ -626,14 +634,6 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> DrvClockSel
 {
   fn clock_sel(&self, value: u32) {
     self.periph.rcc_ccipr_i2csel.write_bits(value);
-  }
-}
-
-impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>>
-  GuardHandler<I2CEn<T, Ev, Er>> for I2CEnGuard<T>
-{
-  fn teardown(&mut self, i2c: &mut I2CEn<T, Ev, Er>) {
-    i2c.periph.rcc_apb1enr_i2cen.clear_bit()
   }
 }
 

@@ -11,10 +11,9 @@ pub use self::{
 };
 
 use crate::common::{DrvClockSel, DrvRcc};
-use core::marker::PhantomData;
 use drone_core::{
   bitfield::Bitfield,
-  shared_guard::{Guard, GuardHandler},
+  inventory::{Inventory0, InventoryGuard, InventoryResource},
 };
 use drone_cortex_m::{
   drv::timer::{Timer, TimerInterval, TimerOverflow, TimerSleep, TimerStop},
@@ -23,16 +22,13 @@ use drone_cortex_m::{
 };
 
 /// Timer driver.
-pub struct Tim<T: TimPeriph, I: IntToken<Att>>(TimEn<T, I>);
+pub struct Tim<T: TimPeriph, I: IntToken<Att>>(Inventory0<TimEn<T, I>>);
 
 /// Timer enabled driver.
 pub struct TimEn<T: TimPeriph, I: IntToken<Att>> {
   periph: T::Diverged,
   int: I,
 }
-
-/// Timer enabled guard handler.
-pub struct TimEnGuard<T: TimPeriph>(PhantomData<T>);
 
 /// Timer peripheral.
 pub trait TimPeriph {
@@ -90,10 +86,10 @@ impl<T: TimPeriph, I: IntToken<Att>> Tim<T, I> {
   /// Creates a new [`Tim`].
   #[inline]
   pub fn new(periph: T, int: I) -> Self {
-    Self(TimEn {
+    Self(Inventory0::new(TimEn {
       periph: periph.diverge(),
       int,
-    })
+    }))
   }
 
   /// Creates a new [`Tim`].
@@ -103,42 +99,52 @@ impl<T: TimPeriph, I: IntToken<Att>> Tim<T, I> {
   /// Some of the `Crt` register tokens can be still in use.
   #[inline]
   pub unsafe fn from_diverged(periph: T::Diverged, int: I) -> Self {
-    Self(TimEn { periph, int })
+    Self(Inventory0::new(TimEn { periph, int }))
   }
 
   /// Releases the peripheral.
   #[inline]
   pub fn free(self) -> T::Diverged {
-    self.0.periph
+    self.0.free().periph
   }
 
   /// Enables timer clock.
-  pub fn enable(&mut self) -> Guard<'_, TimEn<T, I>, TimEnGuard<T>> {
+  pub fn enable(&mut self) -> InventoryGuard<'_, TimEn<T, I>> {
+    self.setup();
+    self.0.guard()
+  }
+
+  /// Enables timer clock.
+  pub fn into_enabled(self) -> Inventory0<TimEn<T, I>> {
+    self.setup();
+    self.0
+  }
+
+  /// Disables timer clock.
+  pub fn from_enabled(mut enabled: Inventory0<TimEn<T, I>>) -> Self {
+    enabled.teardown();
+    Self(enabled)
+  }
+
+  fn setup(&self) {
     let timen = &self.0.periph.rcc_apbenr_timen();
     if timen.read_bit() {
       panic!("Timer wasn't turned off");
     }
     timen.set_bit();
-    Guard::new(&mut self.0, TimEnGuard(PhantomData))
-  }
-
-  /// Enables timer clock.
-  pub fn into_enabled(self) -> TimEn<T, I> {
-    self.0.periph.rcc_apbenr_timen().set_bit();
-    self.0
   }
 }
 
 impl<T: TimPeriph, I: IntToken<Att>> TimEn<T, I> {
-  /// Disables timer clock.
-  pub fn into_disabled(self) -> Tim<T, I> {
-    self.periph.rcc_apbenr_timen().clear_bit();
-    Tim(self)
-  }
-
   /// Sets the counter clock prescaler.
   pub fn presc(&mut self, value: u16) {
     self.periph.presc(value);
+  }
+}
+
+impl<T: TimPeriph, I: IntToken<Att>> InventoryResource for TimEn<T, I> {
+  fn teardown(&mut self) {
+    self.periph.rcc_apbenr_timen().clear_bit()
   }
 }
 
@@ -211,13 +217,5 @@ where
 {
   fn clock_sel(&self, value: u32) {
     self.periph.rcc_ccipr_timsel().write_bits(value);
-  }
-}
-
-impl<T: TimPeriph, I: IntToken<Att>> GuardHandler<TimEn<T, I>>
-  for TimEnGuard<T>
-{
-  fn teardown(&mut self, tim: &mut TimEn<T, I>) {
-    tim.periph.rcc_apbenr_timen().clear_bit()
   }
 }

@@ -1,8 +1,7 @@
 //! Direct memory access controller.
 
 use crate::common::DrvRcc;
-use core::marker::PhantomData;
-use drone_core::shared_guard::{Guard, GuardHandler};
+use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
 use drone_cortex_m::reg::prelude::*;
 use drone_stm32_map::periph::dma::{DmaMap, DmaPeriph};
 
@@ -21,43 +20,56 @@ mod ch;
 pub use self::ch::*;
 
 /// DMA head driver.
-pub struct Dma<T: DmaMap>(DmaEn<T>);
+pub struct Dma<T: DmaMap>(Inventory0<DmaEn<T>>);
 
 /// DMA head enabled driver.
 pub struct DmaEn<T: DmaMap> {
   periph: DmaPeriph<T>,
 }
 
-/// DMA head enabled guard handler.
-pub struct DmaEnGuard<T: DmaMap>(PhantomData<T>);
-
 impl<T: DmaMap> Dma<T> {
   /// Creates a new [`Dma`].
   #[inline]
   pub fn new(periph: DmaPeriph<T>) -> Self {
-    Self(DmaEn { periph })
+    Self(Inventory0::new(DmaEn { periph }))
   }
 
   /// Releases the peripheral.
   #[inline]
   pub fn free(self) -> DmaPeriph<T> {
-    self.0.periph
+    self.0.free().periph
   }
 
   /// Enables DMA clock.
-  pub fn enable(&mut self) -> Guard<'_, DmaEn<T>, DmaEnGuard<T>> {
+  pub fn enable(&mut self) -> InventoryGuard<'_, DmaEn<T>> {
+    self.setup();
+    self.0.guard()
+  }
+
+  /// Enables DMA clock.
+  pub fn into_enabled(self) -> Inventory0<DmaEn<T>> {
+    self.setup();
+    self.0
+  }
+
+  /// Disables DMA clock.
+  pub fn from_enabled(mut enabled: Inventory0<DmaEn<T>>) -> Self {
+    enabled.teardown();
+    Self(enabled)
+  }
+
+  fn setup(&self) {
     let dmaen = &self.0.periph.rcc_ahb1enr_dmaen;
     if dmaen.read_bit() {
       panic!("DMA wasn't turned off");
     }
     dmaen.set_bit();
-    Guard::new(&mut self.0, DmaEnGuard(PhantomData))
   }
+}
 
-  /// Enables DMA clock.
-  pub fn into_enabled(self) -> DmaEn<T> {
-    self.0.periph.rcc_ahb1enr_dmaen.set_bit();
-    self.0
+impl<T: DmaMap> InventoryResource for DmaEn<T> {
+  fn teardown(&mut self) {
+    self.periph.rcc_ahb1enr_dmaen.clear_bit()
   }
 }
 
@@ -78,14 +90,6 @@ impl<T: DmaMap> DrvRcc for Dma<T> {
   }
 }
 
-impl<T: DmaMap> DmaEn<T> {
-  /// Disables DMA clock.
-  pub fn into_disabled(self) -> Dma<T> {
-    self.periph.rcc_ahb1enr_dmaen.clear_bit();
-    Dma(self)
-  }
-}
-
 impl<T: DmaMap> DrvRcc for DmaEn<T> {
   fn reset(&mut self) {
     self.periph.rcc_ahb1rstr_dmarst.set_bit();
@@ -97,11 +101,5 @@ impl<T: DmaMap> DrvRcc for DmaEn<T> {
 
   fn enable_stop_mode(&self) {
     self.periph.rcc_ahb1smenr_dmasmen.set_bit();
-  }
-}
-
-impl<T: DmaMap> GuardHandler<DmaEn<T>> for DmaEnGuard<T> {
-  fn teardown(&mut self, dma: &mut DmaEn<T>) {
-    dma.periph.rcc_ahb1enr_dmaen.clear_bit()
   }
 }

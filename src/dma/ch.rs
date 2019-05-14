@@ -1,5 +1,5 @@
-use super::DmaEnGuard;
-use drone_core::shared_guard::GuardToken;
+use super::DmaEn;
+use drone_core::inventory::InventoryToken;
 use drone_cortex_m::{fib, reg::prelude::*, thr::prelude::*};
 use drone_stm32_map::periph::dma::ch::{traits::*, DmaChMap, DmaChPeriph};
 use failure::Fail;
@@ -93,7 +93,7 @@ impl<T: DmaChMap, I: IntToken<Att>> DmaCh<T, I> {
   #[inline]
   pub fn as_enabled(
     &self,
-    _token: &GuardToken<DmaEnGuard<T::DmaMap>>,
+    _token: &InventoryToken<DmaEn<T::DmaMap>>,
   ) -> &DmaChEn<T, I> {
     &self.0
   }
@@ -102,7 +102,7 @@ impl<T: DmaChMap, I: IntToken<Att>> DmaCh<T, I> {
   #[inline]
   pub fn as_enabled_mut(
     &mut self,
-    _token: &GuardToken<DmaEnGuard<T::DmaMap>>,
+    _token: &InventoryToken<DmaEn<T::DmaMap>>,
   ) -> &mut DmaChEn<T, I> {
     &mut self.0
   }
@@ -111,7 +111,7 @@ impl<T: DmaChMap, I: IntToken<Att>> DmaCh<T, I> {
   #[inline]
   pub fn into_enabled(
     self,
-    token: GuardToken<DmaEnGuard<T::DmaMap>>,
+    token: InventoryToken<DmaEn<T::DmaMap>>,
   ) -> DmaChEn<T, I> {
     // To be recreated in DmaChEn::into_disabled.
     drop(token);
@@ -124,9 +124,9 @@ impl<T: DmaChMap, I: IntToken<Att>> DmaChEn<T, I> {
   #[inline]
   pub fn into_disabled(
     self,
-  ) -> (DmaCh<T, I>, GuardToken<DmaEnGuard<T::DmaMap>>) {
+  ) -> (DmaCh<T, I>, InventoryToken<DmaEn<T::DmaMap>>) {
     // An owned DmaChEn can come only from DmaCh::into_enabled.
-    let token = unsafe { GuardToken::new() };
+    let token = unsafe { InventoryToken::new() };
     (DmaCh(self), token)
   }
 

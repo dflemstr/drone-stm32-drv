@@ -1,5 +1,5 @@
-use super::DmamuxEnGuard;
-use drone_core::shared_guard::GuardToken;
+use super::DmamuxEn;
+use drone_core::inventory::InventoryToken;
 use drone_stm32_map::periph::dma::mux::rg::{DmamuxRgMap, DmamuxRgPeriph};
 
 /// DMAMUX request generator driver.
@@ -27,7 +27,7 @@ impl<T: DmamuxRgMap> DmamuxRg<T> {
   #[inline]
   pub fn as_enabled(
     &self,
-    _token: &GuardToken<DmamuxEnGuard<T::DmamuxMap>>,
+    _token: &InventoryToken<DmamuxEn<T::DmamuxMap>>,
   ) -> &DmamuxRgEn<T> {
     &self.0
   }
@@ -36,8 +36,31 @@ impl<T: DmamuxRgMap> DmamuxRg<T> {
   #[inline]
   pub fn as_enabled_mut(
     &mut self,
-    _token: &GuardToken<DmamuxEnGuard<T::DmamuxMap>>,
+    _token: &InventoryToken<DmamuxEn<T::DmamuxMap>>,
   ) -> &mut DmamuxRgEn<T> {
     &mut self.0
+  }
+
+  /// Acquires the enabled state.
+  #[inline]
+  pub fn into_enabled(
+    self,
+    token: InventoryToken<DmamuxEn<T::DmamuxMap>>,
+  ) -> DmamuxRgEn<T> {
+    // To be recreated in DmamuxRgEn::into_disabled.
+    drop(token);
+    self.0
+  }
+}
+
+impl<T: DmamuxRgMap> DmamuxRgEn<T> {
+  /// Releases the enabled state.
+  #[inline]
+  pub fn into_disabled(
+    self,
+  ) -> (DmamuxRg<T>, InventoryToken<DmamuxEn<T::DmamuxMap>>) {
+    // An owned DmamuxRgEn can come only from DmamuxRg::into_enabled.
+    let token = unsafe { InventoryToken::new() };
+    (DmamuxRg(self), token)
   }
 }

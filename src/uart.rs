@@ -4,8 +4,8 @@ use crate::{
   common::{DrvClockSel, DrvDmaRx, DrvDmaTx, DrvRcc},
   dma::DmaChEn,
 };
-use core::{marker::PhantomData, ptr::read_volatile};
-use drone_core::shared_guard::{Guard, GuardHandler};
+use core::ptr::read_volatile;
+use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
 use drone_cortex_m::{
   fib::{self, Fiber},
   reg::prelude::*,
@@ -24,16 +24,13 @@ use futures::prelude::*;
 pub struct UartRxOverflow;
 
 /// UART driver.
-pub struct Uart<T: UartMap, I: IntToken<Att>>(UartEn<T, I>);
+pub struct Uart<T: UartMap, I: IntToken<Att>>(Inventory0<UartEn<T, I>>);
 
 /// UART enabled driver.
 pub struct UartEn<T: UartMap, I: IntToken<Att>> {
   periph: UartDiverged<T>,
   int: I,
 }
-
-/// UART enabled guard handler.
-pub struct UartEnGuard<T: UartMap>(PhantomData<T>);
 
 /// UART diverged peripheral.
 #[allow(missing_docs)]
@@ -76,7 +73,7 @@ impl<T: UartMap, I: IntToken<Att>> Uart<T, I> {
       uart_rdr: periph.uart_rdr.into_copy(),
       uart_tdr: periph.uart_tdr,
     };
-    Self(UartEn { periph, int })
+    Self(Inventory0::new(UartEn { periph, int }))
   }
 
   /// Creates a new [`Uart`].
@@ -86,39 +83,43 @@ impl<T: UartMap, I: IntToken<Att>> Uart<T, I> {
   /// Some of the `Crt` register tokens can be still in use.
   #[inline]
   pub unsafe fn from_diverged(periph: UartDiverged<T>, int: I) -> Self {
-    Self(UartEn { periph, int })
+    Self(Inventory0::new(UartEn { periph, int }))
   }
 
   /// Releases the peripheral.
   #[inline]
   pub fn free(self) -> UartDiverged<T> {
-    self.0.periph
+    self.0.free().periph
   }
 
   /// Enables UART clock.
-  pub fn enable(&mut self) -> Guard<'_, UartEn<T, I>, UartEnGuard<T>> {
+  pub fn enable(&mut self) -> InventoryGuard<'_, UartEn<T, I>> {
+    self.setup();
+    self.0.guard()
+  }
+
+  /// Enables UART clock.
+  pub fn into_enabled(self) -> Inventory0<UartEn<T, I>> {
+    self.setup();
+    self.0
+  }
+
+  /// Disables UART clock.
+  pub fn from_enabled(mut enabled: Inventory0<UartEn<T, I>>) -> Self {
+    enabled.teardown();
+    Self(enabled)
+  }
+
+  fn setup(&self) {
     let uarten = &self.0.periph.rcc_apbenr_uarten;
     if uarten.read_bit() {
       panic!("UART wasn't turned off");
     }
     uarten.set_bit();
-    Guard::new(&mut self.0, UartEnGuard(PhantomData))
-  }
-
-  /// Enables UART clock.
-  pub fn into_enabled(self) -> UartEn<T, I> {
-    self.0.periph.rcc_apbenr_uarten.set_bit();
-    self.0
   }
 }
 
 impl<T: UartMap, I: IntToken<Att>> UartEn<T, I> {
-  /// Disables UART clock.
-  pub fn into_disabled(self) -> Uart<T, I> {
-    self.periph.rcc_apbenr_uarten.clear_bit();
-    Uart(self)
-  }
-
   /// Returns a future, which resolves on transmission complete event.
   pub fn transmission_complete(&self) -> impl Future<Output = ()> {
     let tc = *self.periph.uart_isr.tc();
@@ -170,6 +171,12 @@ impl<T: UartMap, I: IntToken<Att>> UartEn<T, I> {
         yield None;
       }
     })
+  }
+}
+
+impl<T: UartMap, I: IntToken<Att>> InventoryResource for UartEn<T, I> {
+  fn teardown(&mut self) {
+    self.periph.rcc_apbenr_uarten.clear_bit()
   }
 }
 
@@ -263,13 +270,5 @@ impl<T: UartMap, I: IntToken<Att>> DrvClockSel for Uart<T, I> {
 impl<T: UartMap, I: IntToken<Att>> DrvClockSel for UartEn<T, I> {
   fn clock_sel(&self, value: u32) {
     self.periph.rcc_ccipr_uartsel.write_bits(value);
-  }
-}
-
-impl<T: UartMap, I: IntToken<Att>> GuardHandler<UartEn<T, I>>
-  for UartEnGuard<T>
-{
-  fn teardown(&mut self, uart: &mut UartEn<T, I>) {
-    uart.periph.rcc_apbenr_uarten.clear_bit()
   }
 }

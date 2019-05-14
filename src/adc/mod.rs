@@ -4,14 +4,13 @@ use crate::{
   common::{DrvClockSel, DrvDmaRx, DrvRcc},
   dma::DmaChEn,
 };
-use core::marker::PhantomData;
 #[cfg(any(
   feature = "stm32l4s5",
   feature = "stm32l4s7",
   feature = "stm32l4s9"
 ))]
 use core::ptr::read_volatile;
-use drone_core::shared_guard::{Guard, GuardHandler};
+use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
 use drone_cortex_m::{fib, reg::prelude::*, thr::prelude::*};
 use drone_stm32_map::periph::{
   adc::{traits::*, AdcMap, AdcPeriph},
@@ -40,16 +39,13 @@ mod com;
 pub use self::com::*;
 
 /// ADC driver.
-pub struct Adc<T: AdcMap, I: IntToken<Att>>(AdcEn<T, I>);
+pub struct Adc<T: AdcMap, I: IntToken<Att>>(Inventory0<AdcEn<T, I>>);
 
 /// ADC enabled driver.
 pub struct AdcEn<T: AdcMap, I: IntToken<Att>> {
   periph: AdcDiverged<T>,
   int: I,
 }
-
-/// ADC enabled guard handler.
-pub struct AdcEnGuard<T: AdcMap>(PhantomData<T>);
 
 /// ADC diverged peripheral.
 #[allow(missing_docs)]
@@ -126,7 +122,7 @@ impl<T: AdcMap, I: IntToken<Att>> Adc<T, I> {
       adc_difsel: periph.adc_difsel,
       adc_calfact: periph.adc_calfact,
     };
-    Self(AdcEn { periph, int })
+    Self(Inventory0::new(AdcEn { periph, int }))
   }
 
   /// Creates a new [`Adc`].
@@ -136,39 +132,43 @@ impl<T: AdcMap, I: IntToken<Att>> Adc<T, I> {
   /// Some of the `Crt` register tokens can be still in use.
   #[inline]
   pub unsafe fn from_diverged(periph: AdcDiverged<T>, int: I) -> Self {
-    Self(AdcEn { periph, int })
+    Self(Inventory0::new(AdcEn { periph, int }))
   }
 
   /// Releases the peripheral.
   #[inline]
   pub fn free(self) -> AdcDiverged<T> {
-    self.0.periph
+    self.0.free().periph
   }
 
   /// Enables ADC clock.
-  pub fn enable(&mut self) -> Guard<'_, AdcEn<T, I>, AdcEnGuard<T>> {
+  pub fn enable(&mut self) -> InventoryGuard<'_, AdcEn<T, I>> {
+    self.setup();
+    self.0.guard()
+  }
+
+  /// Enables ADC clock.
+  pub fn into_enabled(self) -> Inventory0<AdcEn<T, I>> {
+    self.setup();
+    self.0
+  }
+
+  /// Disables ADC clock.
+  pub fn from_enabled(mut enabled: Inventory0<AdcEn<T, I>>) -> Self {
+    enabled.teardown();
+    Self(enabled)
+  }
+
+  fn setup(&self) {
     let adcen = &self.0.periph.rcc_ahb2enr_adcen;
     if adcen.read_bit() {
       panic!("ADC wasn't turned off");
     }
     adcen.set_bit();
-    Guard::new(&mut self.0, AdcEnGuard(PhantomData))
-  }
-
-  /// Enables ADC clock.
-  pub fn into_enabled(self) -> AdcEn<T, I> {
-    self.0.periph.rcc_ahb2enr_adcen.set_bit();
-    self.0
   }
 }
 
 impl<T: AdcMap, I: IntToken<Att>> AdcEn<T, I> {
-  /// Disables ADC clock.
-  pub fn into_disabled(self) -> Adc<T, I> {
-    self.periph.rcc_ahb2enr_adcen.clear_bit();
-    Adc(self)
-  }
-
   /// Returns a future, which resolves on ADC ready event.
   pub fn ready(&self) -> impl Future<Output = ()> {
     let adrdy = *self.periph.adc_isr.adrdy();
@@ -219,6 +219,12 @@ impl<T: AdcMap, I: IntToken<Att>> AdcEn<T, I> {
   #[inline]
   pub fn sqr1(&self) -> &T::SAdcSqr1 {
     &self.periph.adc_sqr1
+  }
+}
+
+impl<T: AdcMap, I: IntToken<Att>> InventoryResource for AdcEn<T, I> {
+  fn teardown(&mut self) {
+    self.periph.rcc_ahb2enr_adcen.clear_bit()
   }
 }
 
@@ -276,12 +282,6 @@ impl<T: AdcMap, I: IntToken<Att>> DrvClockSel for Adc<T, I> {
 impl<T: AdcMap, I: IntToken<Att>> DrvClockSel for AdcEn<T, I> {
   fn clock_sel(&self, value: u32) {
     self.periph.rcc_ccipr_adcsel.write_bits(value);
-  }
-}
-
-impl<T: AdcMap, I: IntToken<Att>> GuardHandler<AdcEn<T, I>> for AdcEnGuard<T> {
-  fn teardown(&mut self, adc: &mut AdcEn<T, I>) {
-    adc.periph.rcc_ahb2enr_adcen.clear_bit()
   }
 }
 

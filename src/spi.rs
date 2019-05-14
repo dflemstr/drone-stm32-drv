@@ -4,11 +4,8 @@ use crate::{
   common::{DrvDmaRx, DrvDmaTx, DrvRcc},
   dma::DmaChEn,
 };
-use core::{
-  marker::PhantomData,
-  ptr::{read_volatile, write_volatile},
-};
-use drone_core::shared_guard::{Guard, GuardHandler};
+use core::ptr::{read_volatile, write_volatile};
+use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
 use drone_cortex_m::{reg::prelude::*, thr::prelude::*};
 use drone_stm32_map::periph::{
   dma::ch::DmaChMap,
@@ -31,16 +28,13 @@ pub enum SpiError {
 }
 
 /// SPI driver.
-pub struct Spi<T: SpiMap, I: IntToken<Att>>(SpiEn<T, I>);
+pub struct Spi<T: SpiMap, I: IntToken<Att>>(Inventory0<SpiEn<T, I>>);
 
 /// SPI enabled driver.
 pub struct SpiEn<T: SpiMap, I: IntToken<Att>> {
   periph: SpiDiverged<T>,
   int: I,
 }
-
-/// SPI enabled guard handler.
-pub struct SpiEnGuard<T: SpiMap>(PhantomData<T>);
 
 /// SPI diverged peripheral.
 #[allow(missing_docs)]
@@ -73,7 +67,7 @@ impl<T: SpiMap, I: IntToken<Att>> Spi<T, I> {
       spi_sr: periph.spi_sr,
       spi_txcrcr: periph.spi_txcrcr,
     };
-    Self(SpiEn { periph, int })
+    Self(Inventory0::new(SpiEn { periph, int }))
   }
 
   /// Creates a new [`Spi`].
@@ -83,39 +77,43 @@ impl<T: SpiMap, I: IntToken<Att>> Spi<T, I> {
   /// Some of the `Crt` register tokens can be still in use.
   #[inline]
   pub unsafe fn from_diverged(periph: SpiDiverged<T>, int: I) -> Self {
-    Self(SpiEn { periph, int })
+    Self(Inventory0::new(SpiEn { periph, int }))
   }
 
   /// Releases the peripheral.
   #[inline]
   pub fn free(self) -> SpiDiverged<T> {
-    self.0.periph
+    self.0.free().periph
   }
 
   /// Enables SPI clock.
-  pub fn enable(&mut self) -> Guard<'_, SpiEn<T, I>, SpiEnGuard<T>> {
+  pub fn enable(&mut self) -> InventoryGuard<'_, SpiEn<T, I>> {
+    self.setup();
+    self.0.guard()
+  }
+
+  /// Enables SPI clock.
+  pub fn into_enabled(self) -> Inventory0<SpiEn<T, I>> {
+    self.setup();
+    self.0
+  }
+
+  /// Disables SPI clock.
+  pub fn from_enabled(mut enabled: Inventory0<SpiEn<T, I>>) -> Self {
+    enabled.teardown();
+    Self(enabled)
+  }
+
+  fn setup(&self) {
     let spien = &self.0.periph.rcc_apbenr_spien;
     if spien.read_bit() {
       panic!("SPI wasn't turned off");
     }
     spien.set_bit();
-    Guard::new(&mut self.0, SpiEnGuard(PhantomData))
-  }
-
-  /// Enables SPI clock.
-  pub fn into_enabled(self) -> SpiEn<T, I> {
-    self.0.periph.rcc_apbenr_spien.set_bit();
-    self.0
   }
 }
 
 impl<T: SpiMap, I: IntToken<Att>> SpiEn<T, I> {
-  /// Disables SPI clock.
-  pub fn into_disabled(self) -> Spi<T, I> {
-    self.periph.rcc_apbenr_spien.clear_bit();
-    Spi(self)
-  }
-
   /// Sets the size of a data frame to 8 bits.
   #[allow(unused_variables)]
   #[inline]
@@ -231,6 +229,12 @@ impl<T: SpiMap, I: IntToken<Att>> SpiEn<T, I> {
   }
 }
 
+impl<T: SpiMap, I: IntToken<Att>> InventoryResource for SpiEn<T, I> {
+  fn teardown(&mut self) {
+    self.periph.rcc_apbenr_spien.clear_bit()
+  }
+}
+
 impl<T: SpiMap, I: IntToken<Att>, Rx: DmaChMap> DrvDmaRx<Rx> for Spi<T, I> {
   #[inline]
   fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
@@ -285,11 +289,5 @@ impl<T: SpiMap, I: IntToken<Att>> DrvRcc for SpiEn<T, I> {
 
   fn enable_stop_mode(&self) {
     self.periph.rcc_apbsmenr_spismen.set_bit();
-  }
-}
-
-impl<T: SpiMap, I: IntToken<Att>> GuardHandler<SpiEn<T, I>> for SpiEnGuard<T> {
-  fn teardown(&mut self, spi: &mut SpiEn<T, I>) {
-    spi.periph.rcc_apbenr_spien.clear_bit()
   }
 }

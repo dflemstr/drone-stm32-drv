@@ -1,57 +1,55 @@
 //! General-purpose I/O.
 
 use crate::common::DrvRcc;
-use core::marker::PhantomData;
-use drone_core::shared_guard::{Guard, GuardHandler};
+use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
 use drone_cortex_m::reg::prelude::*;
 use drone_stm32_map::periph::gpio::head::{GpioHeadMap, GpioHeadPeriph};
 
 /// GPIO port head driver.
-pub struct GpioHead<T: GpioHeadMap>(GpioHeadEn<T>);
+pub struct GpioHead<T: GpioHeadMap>(Inventory0<GpioHeadEn<T>>);
 
 /// GPIO port head enabled driver.
 pub struct GpioHeadEn<T: GpioHeadMap> {
   periph: GpioHeadPeriph<T>,
 }
 
-/// GPIO port head enabled guard handler.
-pub struct GpioHeadEnGuard<T: GpioHeadMap>(PhantomData<T>);
-
 impl<T: GpioHeadMap> GpioHead<T> {
   /// Creates a new [`GpioHead`].
   #[inline]
   pub fn new(periph: GpioHeadPeriph<T>) -> Self {
-    Self(GpioHeadEn { periph })
+    Self(Inventory0::new(GpioHeadEn { periph }))
   }
 
   /// Releases the peripheral.
   #[inline]
   pub fn free(self) -> GpioHeadPeriph<T> {
-    self.0.periph
+    self.0.free().periph
   }
 
   /// Enables the port clock.
-  pub fn enable(&mut self) -> Guard<'_, GpioHeadEn<T>, GpioHeadEnGuard<T>> {
+  pub fn enable(&mut self) -> InventoryGuard<'_, GpioHeadEn<T>> {
+    self.setup();
+    self.0.guard()
+  }
+
+  /// Enables the port clock.
+  pub fn into_enabled(self) -> Inventory0<GpioHeadEn<T>> {
+    self.setup();
+    self.0
+  }
+
+  /// Disables the port clock.
+  pub fn from_enabled(mut enabled: Inventory0<GpioHeadEn<T>>) -> Self {
+    enabled.teardown();
+    Self(enabled)
+  }
+
+  fn setup(&self) {
     let gpioen = &self.0.periph.rcc_ahb2enr_gpioen;
     if gpioen.read_bit() {
       panic!("GPIO wasn't turned off");
     }
     gpioen.set_bit();
-    Guard::new(&mut self.0, GpioHeadEnGuard(PhantomData))
-  }
-
-  /// Enables the port clock.
-  pub fn into_enabled(self) -> GpioHeadEn<T> {
-    self.0.periph.rcc_ahb2enr_gpioen.set_bit();
-    self.0
-  }
-}
-
-impl<T: GpioHeadMap> GpioHeadEn<T> {
-  /// Disables the port clock.
-  pub fn into_disabled(self) -> GpioHead<T> {
-    self.periph.rcc_ahb2enr_gpioen.clear_bit();
-    GpioHead(self)
   }
 }
 
@@ -72,6 +70,12 @@ impl<T: GpioHeadMap> DrvRcc for GpioHead<T> {
   }
 }
 
+impl<T: GpioHeadMap> InventoryResource for GpioHeadEn<T> {
+  fn teardown(&mut self) {
+    self.periph.rcc_ahb2enr_gpioen.clear_bit()
+  }
+}
+
 impl<T: GpioHeadMap> DrvRcc for GpioHeadEn<T> {
   fn reset(&mut self) {
     self.periph.rcc_ahb2rstr_gpiorst.set_bit();
@@ -83,11 +87,5 @@ impl<T: GpioHeadMap> DrvRcc for GpioHeadEn<T> {
 
   fn enable_stop_mode(&self) {
     self.periph.rcc_ahb2smenr_gpiosmen.set_bit();
-  }
-}
-
-impl<T: GpioHeadMap> GuardHandler<GpioHeadEn<T>> for GpioHeadEnGuard<T> {
-  fn teardown(&mut self, gpio_head: &mut GpioHeadEn<T>) {
-    gpio_head.periph.rcc_ahb2enr_gpioen.clear_bit()
   }
 }

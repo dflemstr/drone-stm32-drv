@@ -1,8 +1,7 @@
 //! DMA request multiplexer.
 
 use crate::common::DrvRcc;
-use core::marker::PhantomData;
-use drone_core::shared_guard::{Guard, GuardHandler};
+use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
 use drone_cortex_m::reg::prelude::*;
 use drone_stm32_map::periph::dma::mux::{DmamuxMap, DmamuxPeriph};
 
@@ -12,43 +11,56 @@ mod rg;
 pub use self::{ch::*, rg::*};
 
 /// DMAMUX head driver.
-pub struct Dmamux<T: DmamuxMap>(DmamuxEn<T>);
+pub struct Dmamux<T: DmamuxMap>(Inventory0<DmamuxEn<T>>);
 
 /// DMAMUX head enabled driver.
 pub struct DmamuxEn<T: DmamuxMap> {
   periph: DmamuxPeriph<T>,
 }
 
-/// DMAMUX head enabled guard handler.
-pub struct DmamuxEnGuard<T: DmamuxMap>(PhantomData<T>);
-
 impl<T: DmamuxMap> Dmamux<T> {
   /// Creates a new [`Dmamux`].
   #[inline]
   pub fn new(periph: DmamuxPeriph<T>) -> Self {
-    Self(DmamuxEn { periph })
+    Self(Inventory0::new(DmamuxEn { periph }))
   }
 
   /// Releases the peripheral.
   #[inline]
   pub fn free(self) -> DmamuxPeriph<T> {
-    self.0.periph
+    self.0.free().periph
   }
 
   /// Enables DMAMUX clock.
-  pub fn enable(&mut self) -> Guard<'_, DmamuxEn<T>, DmamuxEnGuard<T>> {
+  pub fn enable(&mut self) -> InventoryGuard<'_, DmamuxEn<T>> {
+    self.setup();
+    self.0.guard()
+  }
+
+  /// Enables DMAMUX clock.
+  pub fn into_enabled(self) -> Inventory0<DmamuxEn<T>> {
+    self.setup();
+    self.0
+  }
+
+  /// Disables DMAMUX clock.
+  pub fn from_enabled(mut enabled: Inventory0<DmamuxEn<T>>) -> Self {
+    enabled.teardown();
+    Self(enabled)
+  }
+
+  fn setup(&self) {
     let dmamuxen = &self.0.periph.rcc_ahb1enr_dmamuxen;
     if dmamuxen.read_bit() {
       panic!("DMAMUX wasn't turned off");
     }
     dmamuxen.set_bit();
-    Guard::new(&mut self.0, DmamuxEnGuard(PhantomData))
   }
+}
 
-  /// Enables DMAMUX clock.
-  pub fn into_enabled(self) -> DmamuxEn<T> {
-    self.0.periph.rcc_ahb1enr_dmamuxen.set_bit();
-    self.0
+impl<T: DmamuxMap> InventoryResource for DmamuxEn<T> {
+  fn teardown(&mut self) {
+    self.periph.rcc_ahb1enr_dmamuxen.clear_bit()
   }
 }
 
@@ -69,14 +81,6 @@ impl<T: DmamuxMap> DrvRcc for Dmamux<T> {
   }
 }
 
-impl<T: DmamuxMap> DmamuxEn<T> {
-  /// Disables DMAMUX clock.
-  pub fn into_disabled(self) -> Dmamux<T> {
-    self.periph.rcc_ahb1enr_dmamuxen.clear_bit();
-    Dmamux(self)
-  }
-}
-
 impl<T: DmamuxMap> DrvRcc for DmamuxEn<T> {
   fn reset(&mut self) {
     self.periph.rcc_ahb1rstr_dmamuxrst.set_bit();
@@ -88,11 +92,5 @@ impl<T: DmamuxMap> DrvRcc for DmamuxEn<T> {
 
   fn enable_stop_mode(&self) {
     self.periph.rcc_ahb1smenr_dmamuxsmen.set_bit();
-  }
-}
-
-impl<T: DmamuxMap> GuardHandler<DmamuxEn<T>> for DmamuxEnGuard<T> {
-  fn teardown(&mut self, dmamux: &mut DmamuxEn<T>) {
-    dmamux.periph.rcc_ahb1enr_dmamuxen.clear_bit()
   }
 }
