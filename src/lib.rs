@@ -8,9 +8,9 @@
 #![warn(missing_docs)]
 #![warn(clippy::pedantic)]
 #![allow(
-  clippy::cast_possible_truncation,
-  clippy::module_name_repetitions,
-  clippy::similar_names
+    clippy::cast_possible_truncation,
+    clippy::module_name_repetitions,
+    clippy::similar_names
 )]
 #![cfg_attr(test, feature(allocator_api, allocator_internals))]
 #![cfg_attr(test, default_lib_allocator)]
@@ -34,14 +34,14 @@ use drone_cortex_m::prelude::*;
 
 #[cfg(test)]
 drone_core::heap! {
-  struct Heap;
-  size = 0x40000;
-  pools = [
-    [0x4; 0x4000],
-    [0x20; 0x800],
-    [0x100; 0x100],
-    [0x800; 0x20],
-  ];
+    struct Heap;
+    size = 0x40000;
+    pools = [
+        [0x4; 0x4000],
+        [0x20; 0x800],
+        [0x100; 0x100],
+        [0x800; 0x20],
+    ];
 }
 
 #[cfg(test)]
