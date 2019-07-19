@@ -4,7 +4,7 @@ use crate::{
     common::{DrvClockSel, DrvDmaRx, DrvDmaTx, DrvRcc},
     dma::DmaChEn,
 };
-use core::ptr::read_volatile;
+use core::{fmt, ptr::read_volatile};
 use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
 use drone_cortex_m::{
     fib::{self, Fiber},
@@ -15,12 +15,10 @@ use drone_stm32_map::periph::{
     dma::ch::DmaChMap,
     uart::{traits::*, UartMap, UartPeriph},
 };
-use failure::Fail;
 use futures::prelude::*;
 
 /// UART receive stream overflow.
-#[derive(Debug, Fail)]
-#[fail(display = "UART RX stream overflow.")]
+#[derive(Debug)]
 pub struct UartRxOverflow;
 
 /// UART driver.
@@ -265,5 +263,11 @@ impl<T: UartMap, I: IntToken<Att>> DrvClockSel for Uart<T, I> {
 impl<T: UartMap, I: IntToken<Att>> DrvClockSel for UartEn<T, I> {
     fn clock_sel(&self, value: u32) {
         self.periph.rcc_ccipr_uartsel.write_bits(value);
+    }
+}
+
+impl fmt::Display for UartRxOverflow {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "UART RX stream overflow.")
     }
 }

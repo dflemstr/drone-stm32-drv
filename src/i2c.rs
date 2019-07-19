@@ -5,6 +5,7 @@ use crate::{
     dma::{DmaChEn, DmaTransferError},
     select3::{Output3, Select3},
 };
+use core::fmt;
 use drone_core::{
     awt,
     inventory::{Inventory0, InventoryGuard, InventoryResource},
@@ -14,54 +15,42 @@ use drone_stm32_map::periph::{
     dma::ch::{traits::*, DmaChMap},
     i2c::{traits::*, I2CMap, I2CPeriph},
 };
-use failure::Fail;
 use futures::prelude::*;
 
 /// I2C DMA error.
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum I2CDmaError {
     /// DMA error.
-    #[fail(display = "DMA error: {}", _0)]
     Dma(DmaTransferError),
     /// I2C transfer failure.
-    #[fail(display = "I2C failure: {}", _0)]
     I2CBreak(I2CBreak),
     /// I2C error.
-    #[fail(display = "I2C error: {}", _0)]
     I2CError(I2CError),
 }
 
 /// I2C error.
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum I2CError {
     /// Bus error.
-    #[fail(display = "I2C bus error.")]
     Berr,
     /// Overrun/Underrun.
-    #[fail(display = "I2C overrun.")]
     Ovr,
     /// Arbitration lost.
-    #[fail(display = "I2C arbitration lost.")]
     Arlo,
     /// Timeout or t_low detection flag.
-    #[fail(display = "I2C timeout.")]
     Timeout,
     /// SMBus alert.
-    #[fail(display = "I2C SMBus alert.")]
     Alert,
     /// PEC error in reception.
-    #[fail(display = "I2C PEC error.")]
     Pecerr,
 }
 
 /// I2C transfer failure event.
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum I2CBreak {
     /// NACK reception.
-    #[fail(display = "I2C NACK received.")]
     Nack,
     /// Stop reception.
-    #[fail(display = "I2C STOP received.")]
     Stop,
 }
 
@@ -636,5 +625,37 @@ impl From<I2CBreak> for I2CDmaError {
 impl From<I2CError> for I2CDmaError {
     fn from(err: I2CError) -> Self {
         I2CDmaError::I2CError(err)
+    }
+}
+
+impl fmt::Display for I2CDmaError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            I2CDmaError::Dma(err) => write!(f, "DMA error: {}", err),
+            I2CDmaError::I2CBreak(err) => write!(f, "I2C failure: {}", err),
+            I2CDmaError::I2CError(err) => write!(f, "I2C error: {}", err),
+        }
+    }
+}
+
+impl fmt::Display for I2CError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            I2CError::Berr => write!(f, "I2C bus error."),
+            I2CError::Ovr => write!(f, "I2C overrun."),
+            I2CError::Arlo => write!(f, "I2C arbitration lost."),
+            I2CError::Timeout => write!(f, "I2C timeout."),
+            I2CError::Alert => write!(f, "I2C SMBus alert."),
+            I2CError::Pecerr => write!(f, "I2C PEC error."),
+        }
+    }
+}
+
+impl fmt::Display for I2CBreak {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            I2CBreak::Nack => write!(f, "I2C NACK received."),
+            I2CBreak::Stop => write!(f, "I2C STOP received."),
+        }
     }
 }

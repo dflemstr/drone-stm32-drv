@@ -4,26 +4,25 @@ use crate::{
     common::{DrvDmaRx, DrvDmaTx, DrvRcc},
     dma::DmaChEn,
 };
-use core::ptr::{read_volatile, write_volatile};
+use core::{
+    fmt,
+    ptr::{read_volatile, write_volatile},
+};
 use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
 use drone_cortex_m::{reg::prelude::*, thr::prelude::*};
 use drone_stm32_map::periph::{
     dma::ch::DmaChMap,
     spi::{traits::*, SpiMap, SpiPeriph},
 };
-use failure::Fail;
 
 /// Motorola SPI mode error.
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum SpiError {
     /// CRC value received does not match the `SPIx_RXCRCR` value.
-    #[fail(display = "SPI CRC mismatch.")]
     Crcerr,
     /// Overrun occurred.
-    #[fail(display = "SPI queue overrun.")]
     Ovr,
     /// Mode fault occurred.
-    #[fail(display = "SPI mode fault.")]
     Modf,
 }
 
@@ -289,5 +288,15 @@ impl<T: SpiMap, I: IntToken<Att>> DrvRcc for SpiEn<T, I> {
 
     fn enable_stop_mode(&self) {
         self.periph.rcc_apbsmenr_spismen.set_bit();
+    }
+}
+
+impl fmt::Display for SpiError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SpiError::Crcerr => write!(f, "SPI CRC mismatch."),
+            SpiError::Ovr => write!(f, "SPI queue overrun."),
+            SpiError::Modf => write!(f, "SPI mode fault."),
+        }
     }
 }

@@ -1,13 +1,12 @@
 use super::DmaEn;
+use core::fmt;
 use drone_core::inventory::InventoryToken;
 use drone_cortex_m::{fib, reg::prelude::*, thr::prelude::*};
 use drone_stm32_map::periph::dma::ch::{traits::*, DmaChMap, DmaChPeriph};
-use failure::Fail;
 use futures::prelude::*;
 
 /// Error returned when `DMA_ISR_TEIFx` flag in set.
-#[derive(Debug, Fail)]
-#[fail(display = "DMA transfer error.")]
+#[derive(Debug)]
 pub struct DmaTransferError;
 
 /// DMA channel driver.
@@ -227,5 +226,11 @@ impl<T: DmaChMap, I: IntToken<Att>> DmaChEn<T, I> {
     #[inline]
     pub fn ccr(&self) -> &T::SDmaCcr {
         &self.periph.dma_ccr
+    }
+}
+
+impl fmt::Display for DmaTransferError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "DMA transfer error.")
     }
 }
