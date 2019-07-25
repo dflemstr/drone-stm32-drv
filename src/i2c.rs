@@ -6,10 +6,7 @@ use crate::{
     select3::{Output3, Select3},
 };
 use core::fmt;
-use drone_core::{
-    awt,
-    inventory::{Inventory0, InventoryGuard, InventoryResource},
-};
+use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
 use drone_cortex_m::{fib, reg::prelude::*, thr::prelude::*};
 use drone_stm32_map::periph::{
     dma::ch::{traits::*, DmaChMap},
@@ -290,142 +287,138 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
         }))
     }
 
-    fn read_impl<'a, Rx: DmaChMap>(
-        &'a self,
-        dma_rx: &'a DmaChEn<Rx, impl IntToken<Att>>,
-        buf: &'a mut [u8],
+    async fn read_impl<Rx: DmaChMap>(
+        &self,
+        dma_rx: &DmaChEn<Rx, impl IntToken<Att>>,
+        buf: &mut [u8],
         slave_addr: u8,
         mut i2c_cr1_val: T::I2CCr1Val,
         mut i2c_cr2_val: T::I2CCr2Val,
         autoend: bool,
-    ) -> impl Future<Output = Result<(), I2CDmaError>> + 'a {
+    ) -> Result<(), I2CDmaError> {
         if buf.len() > 255 {
             panic!("I2C read overflow");
         }
-        asnc(move || {
-            unsafe { dma_rx.set_maddr(buf.as_mut_ptr()) };
-            dma_rx.set_size(buf.len());
-            dma_rx.ccr().store_val({
-                let mut rx_ccr = self.init_dma_rx_ccr(dma_rx);
-                dma_rx.ccr().en().set(&mut rx_ccr);
-                rx_ccr
-            });
-            self.periph.i2c_cr1.store_val({
-                self.periph.i2c_cr1.pe().set(&mut i2c_cr1_val);
-                self.periph.i2c_cr1.errie().set(&mut i2c_cr1_val);
-                self.periph.i2c_cr1.nackie().set(&mut i2c_cr1_val);
-                self.periph.i2c_cr1.rxdmaen().set(&mut i2c_cr1_val);
-                i2c_cr1_val
-            });
-            let dma_rx_complete = dma_rx.transfer_complete();
-            let i2c_break = self.transfer_break();
-            let i2c_error = self.transfer_error();
-            self.set_i2c_cr2(&mut i2c_cr2_val, slave_addr, autoend, buf.len(), false);
-            self.periph.i2c_cr2.store_val(i2c_cr2_val);
-            match awt!(Select3::new(dma_rx_complete, i2c_break, i2c_error)) {
-                Output3::A(Ok(()), i2c_break, i2c_error) => {
-                    drop(i2c_break);
-                    drop(i2c_error);
-                    dma_rx.ccr().store_val(self.init_dma_rx_ccr(dma_rx));
-                    self.int_ev.trigger();
-                    self.int_er.trigger();
-                    Ok(())
-                }
-                Output3::A(Err(dma_rx_err), i2c_break, i2c_error) => {
-                    drop(i2c_break);
-                    drop(i2c_error);
-                    dma_rx.ccr().store_val(self.init_dma_rx_ccr(dma_rx));
-                    self.int_ev.trigger();
-                    self.int_er.trigger();
-                    Err(dma_rx_err.into())
-                }
-                Output3::B(dma_rx_fut, i2c_break, i2c_error) => {
-                    drop(dma_rx_fut);
-                    drop(i2c_error);
-                    dma_rx.ccr().store_val(self.init_dma_rx_ccr(dma_rx));
-                    dma_rx.int().trigger();
-                    self.int_er.trigger();
-                    Err(i2c_break.into())
-                }
-                Output3::C(dma_rx_fut, i2c_break, i2c_error) => {
-                    drop(dma_rx_fut);
-                    drop(i2c_break);
-                    dma_rx.ccr().store_val(self.init_dma_rx_ccr(dma_rx));
-                    dma_rx.int().trigger();
-                    self.int_ev.trigger();
-                    Err(i2c_error.into())
-                }
+        unsafe { dma_rx.set_maddr(buf.as_mut_ptr()) };
+        dma_rx.set_size(buf.len());
+        dma_rx.ccr().store_val({
+            let mut rx_ccr = self.init_dma_rx_ccr(dma_rx);
+            dma_rx.ccr().en().set(&mut rx_ccr);
+            rx_ccr
+        });
+        self.periph.i2c_cr1.store_val({
+            self.periph.i2c_cr1.pe().set(&mut i2c_cr1_val);
+            self.periph.i2c_cr1.errie().set(&mut i2c_cr1_val);
+            self.periph.i2c_cr1.nackie().set(&mut i2c_cr1_val);
+            self.periph.i2c_cr1.rxdmaen().set(&mut i2c_cr1_val);
+            i2c_cr1_val
+        });
+        let dma_rx_complete = dma_rx.transfer_complete();
+        let i2c_break = self.transfer_break();
+        let i2c_error = self.transfer_error();
+        self.set_i2c_cr2(&mut i2c_cr2_val, slave_addr, autoend, buf.len(), false);
+        self.periph.i2c_cr2.store_val(i2c_cr2_val);
+        match Select3::new(dma_rx_complete, i2c_break, i2c_error).await {
+            Output3::A(Ok(()), i2c_break, i2c_error) => {
+                drop(i2c_break);
+                drop(i2c_error);
+                dma_rx.ccr().store_val(self.init_dma_rx_ccr(dma_rx));
+                self.int_ev.trigger();
+                self.int_er.trigger();
+                Ok(())
             }
-        })
+            Output3::A(Err(dma_rx_err), i2c_break, i2c_error) => {
+                drop(i2c_break);
+                drop(i2c_error);
+                dma_rx.ccr().store_val(self.init_dma_rx_ccr(dma_rx));
+                self.int_ev.trigger();
+                self.int_er.trigger();
+                Err(dma_rx_err.into())
+            }
+            Output3::B(dma_rx_fut, i2c_break, i2c_error) => {
+                drop(dma_rx_fut);
+                drop(i2c_error);
+                dma_rx.ccr().store_val(self.init_dma_rx_ccr(dma_rx));
+                dma_rx.int().trigger();
+                self.int_er.trigger();
+                Err(i2c_break.into())
+            }
+            Output3::C(dma_rx_fut, i2c_break, i2c_error) => {
+                drop(dma_rx_fut);
+                drop(i2c_break);
+                dma_rx.ccr().store_val(self.init_dma_rx_ccr(dma_rx));
+                dma_rx.int().trigger();
+                self.int_ev.trigger();
+                Err(i2c_error.into())
+            }
+        }
     }
 
-    fn write_impl<'a, Tx: DmaChMap>(
-        &'a self,
-        dma_tx: &'a DmaChEn<Tx, impl IntToken<Att>>,
-        buf: &'a [u8],
+    async fn write_impl<Tx: DmaChMap>(
+        &self,
+        dma_tx: &DmaChEn<Tx, impl IntToken<Att>>,
+        buf: &[u8],
         slave_addr: u8,
         mut i2c_cr1_val: T::I2CCr1Val,
         mut i2c_cr2_val: T::I2CCr2Val,
         autoend: bool,
-    ) -> impl Future<Output = Result<(), I2CDmaError>> + 'a {
+    ) -> Result<(), I2CDmaError> {
         if buf.len() > 255 {
             panic!("I2C write overflow");
         }
-        asnc(move || {
-            unsafe { dma_tx.set_maddr(buf.as_ptr()) };
-            dma_tx.set_size(buf.len());
-            dma_tx.ccr().store_val({
-                let mut tx_ccr = self.init_dma_tx_ccr(dma_tx);
-                dma_tx.ccr().en().set(&mut tx_ccr);
-                tx_ccr
-            });
-            self.periph.i2c_cr1.store_val({
-                self.periph.i2c_cr1.pe().set(&mut i2c_cr1_val);
-                self.periph.i2c_cr1.errie().set(&mut i2c_cr1_val);
-                self.periph.i2c_cr1.nackie().set(&mut i2c_cr1_val);
-                self.periph.i2c_cr1.txdmaen().set(&mut i2c_cr1_val);
-                i2c_cr1_val
-            });
-            let dma_tx_complete = dma_tx.transfer_complete();
-            let i2c_break = self.transfer_break();
-            let i2c_error = self.transfer_error();
-            self.set_i2c_cr2(&mut i2c_cr2_val, slave_addr, autoend, buf.len(), true);
-            self.periph.i2c_cr2.store_val(i2c_cr2_val);
-            match awt!(Select3::new(dma_tx_complete, i2c_break, i2c_error)) {
-                Output3::A(Ok(()), i2c_break, i2c_error) => {
-                    drop(i2c_break);
-                    drop(i2c_error);
-                    dma_tx.ccr().store_val(self.init_dma_tx_ccr(dma_tx));
-                    self.int_ev.trigger();
-                    self.int_er.trigger();
-                    Ok(())
-                }
-                Output3::A(Err(dma_tx_err), i2c_break, i2c_error) => {
-                    drop(i2c_break);
-                    drop(i2c_error);
-                    dma_tx.ccr().store_val(self.init_dma_tx_ccr(dma_tx));
-                    self.int_ev.trigger();
-                    self.int_er.trigger();
-                    Err(dma_tx_err.into())
-                }
-                Output3::B(dma_tx_fut, i2c_break, i2c_error) => {
-                    drop(dma_tx_fut);
-                    drop(i2c_error);
-                    dma_tx.ccr().store_val(self.init_dma_tx_ccr(dma_tx));
-                    dma_tx.int().trigger();
-                    self.int_er.trigger();
-                    Err(i2c_break.into())
-                }
-                Output3::C(dma_tx_fut, i2c_break, i2c_error) => {
-                    drop(dma_tx_fut);
-                    drop(i2c_break);
-                    dma_tx.ccr().store_val(self.init_dma_tx_ccr(dma_tx));
-                    dma_tx.int().trigger();
-                    self.int_ev.trigger();
-                    Err(i2c_error.into())
-                }
+        unsafe { dma_tx.set_maddr(buf.as_ptr()) };
+        dma_tx.set_size(buf.len());
+        dma_tx.ccr().store_val({
+            let mut tx_ccr = self.init_dma_tx_ccr(dma_tx);
+            dma_tx.ccr().en().set(&mut tx_ccr);
+            tx_ccr
+        });
+        self.periph.i2c_cr1.store_val({
+            self.periph.i2c_cr1.pe().set(&mut i2c_cr1_val);
+            self.periph.i2c_cr1.errie().set(&mut i2c_cr1_val);
+            self.periph.i2c_cr1.nackie().set(&mut i2c_cr1_val);
+            self.periph.i2c_cr1.txdmaen().set(&mut i2c_cr1_val);
+            i2c_cr1_val
+        });
+        let dma_tx_complete = dma_tx.transfer_complete();
+        let i2c_break = self.transfer_break();
+        let i2c_error = self.transfer_error();
+        self.set_i2c_cr2(&mut i2c_cr2_val, slave_addr, autoend, buf.len(), true);
+        self.periph.i2c_cr2.store_val(i2c_cr2_val);
+        match Select3::new(dma_tx_complete, i2c_break, i2c_error).await {
+            Output3::A(Ok(()), i2c_break, i2c_error) => {
+                drop(i2c_break);
+                drop(i2c_error);
+                dma_tx.ccr().store_val(self.init_dma_tx_ccr(dma_tx));
+                self.int_ev.trigger();
+                self.int_er.trigger();
+                Ok(())
             }
-        })
+            Output3::A(Err(dma_tx_err), i2c_break, i2c_error) => {
+                drop(i2c_break);
+                drop(i2c_error);
+                dma_tx.ccr().store_val(self.init_dma_tx_ccr(dma_tx));
+                self.int_ev.trigger();
+                self.int_er.trigger();
+                Err(dma_tx_err.into())
+            }
+            Output3::B(dma_tx_fut, i2c_break, i2c_error) => {
+                drop(dma_tx_fut);
+                drop(i2c_error);
+                dma_tx.ccr().store_val(self.init_dma_tx_ccr(dma_tx));
+                dma_tx.int().trigger();
+                self.int_er.trigger();
+                Err(i2c_break.into())
+            }
+            Output3::C(dma_tx_fut, i2c_break, i2c_error) => {
+                drop(dma_tx_fut);
+                drop(i2c_break);
+                dma_tx.ccr().store_val(self.init_dma_tx_ccr(dma_tx));
+                dma_tx.int().trigger();
+                self.int_ev.trigger();
+                Err(i2c_error.into())
+            }
+        }
     }
 
     fn set_i2c_cr2(

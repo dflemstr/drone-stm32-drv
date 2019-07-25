@@ -1,5 +1,6 @@
 //! Drone for STM32. Drivers.
 
+#![feature(async_await)]
 #![feature(generators)]
 #![feature(prelude_import)]
 #![no_std]
