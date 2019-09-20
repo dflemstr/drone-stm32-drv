@@ -35,8 +35,8 @@ stm32l4s7 = ["drone-stm32-map/stm32l4s7"]
 stm32l4s9 = ["drone-stm32-map/stm32l4s9"]
 
 [dependencies]
-core = { version = "0.10.0", package = "libcore-drone", path = "../../drone-os/libcore-drone" }
-drone-core = { version = "0.10.0", path = "../../drone-os/drone-core" }
-drone-cortex-m = { version = "0.10.0", path = "../../drone-os/drone-cortex-m" }
-drone-stm32-map = { version = "0.10.0", path = "../../drone-os/drone-stm32-map" }
+core = { version = "0.10.0", package = "libcore-drone" }
+drone-core = { version = "0.10.0" }
+drone-cortex-m = { version = "0.10.0" }
+drone-stm32-map = { version = "0.10.0" }
 futures-preview = { version = "0.3.0-alpha", default-features = false }
