@@ -1,5 +1,5 @@
 use super::DmamuxEn;
-use drone_core::inventory::InventoryToken;
+use drone_core::inventory;
 use drone_cortex_m::reg::prelude::*;
 use drone_stm32_map::periph::dma::mux::ch::{traits::*, DmamuxChMap, DmamuxChPeriph};
 
@@ -26,7 +26,7 @@ impl<T: DmamuxChMap> DmamuxCh<T> {
 
     /// Acquires the enabled state.
     #[inline]
-    pub fn as_enabled(&self, _token: &InventoryToken<DmamuxEn<T::DmamuxMap>>) -> &DmamuxChEn<T> {
+    pub fn as_enabled(&self, _token: &inventory::Token<DmamuxEn<T::DmamuxMap>>) -> &DmamuxChEn<T> {
         &self.0
     }
 
@@ -34,15 +34,15 @@ impl<T: DmamuxChMap> DmamuxCh<T> {
     #[inline]
     pub fn as_enabled_mut(
         &mut self,
-        _token: &InventoryToken<DmamuxEn<T::DmamuxMap>>,
+        _token: &inventory::Token<DmamuxEn<T::DmamuxMap>>,
     ) -> &mut DmamuxChEn<T> {
         &mut self.0
     }
 
     /// Acquires the enabled state.
     #[inline]
-    pub fn into_enabled(self, token: InventoryToken<DmamuxEn<T::DmamuxMap>>) -> DmamuxChEn<T> {
-        // To be recreated in DmamuxChEn::into_disabled.
+    pub fn into_enabled(self, token: inventory::Token<DmamuxEn<T::DmamuxMap>>) -> DmamuxChEn<T> {
+        // To be recreated in `into_disabled()`.
         drop(token);
         self.0
     }
@@ -51,9 +51,9 @@ impl<T: DmamuxChMap> DmamuxCh<T> {
 impl<T: DmamuxChMap> DmamuxChEn<T> {
     /// Releases the enabled state.
     #[inline]
-    pub fn into_disabled(self) -> (DmamuxCh<T>, InventoryToken<DmamuxEn<T::DmamuxMap>>) {
-        // An owned DmamuxChEn can come only from DmamuxCh::into_enabled.
-        let token = unsafe { InventoryToken::new() };
+    pub fn into_disabled(self) -> (DmamuxCh<T>, inventory::Token<DmamuxEn<T::DmamuxMap>>) {
+        // Restoring the token dropped in `into_enabled()`.
+        let token = unsafe { inventory::Token::new() };
         (DmamuxCh(self), token)
     }
 

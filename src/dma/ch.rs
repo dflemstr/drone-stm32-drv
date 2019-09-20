@@ -1,6 +1,6 @@
 use super::DmaEn;
 use core::fmt;
-use drone_core::inventory::InventoryToken;
+use drone_core::inventory;
 use drone_cortex_m::{fib, reg::prelude::*, thr::prelude::*};
 use drone_stm32_map::periph::dma::ch::{traits::*, DmaChMap, DmaChPeriph};
 use futures::prelude::*;
@@ -10,10 +10,10 @@ use futures::prelude::*;
 pub struct DmaTransferError;
 
 /// DMA channel driver.
-pub struct DmaCh<T: DmaChMap, I: IntToken<Att>>(DmaChEn<T, I>);
+pub struct DmaCh<T: DmaChMap, I: IntToken>(DmaChEn<T, I>);
 
 /// DMA channel enabled driver.
-pub struct DmaChEn<T: DmaChMap, I: IntToken<Att>> {
+pub struct DmaChEn<T: DmaChMap, I: IntToken> {
     periph: DmaChDiverged<T>,
     int: I,
 }
@@ -43,7 +43,7 @@ pub struct DmaChDiverged<T: DmaChMap> {
     pub dma_isr_teif: T::CDmaIsrTeif,
 }
 
-impl<T: DmaChMap, I: IntToken<Att>> DmaCh<T, I> {
+impl<T: DmaChMap, I: IntToken> DmaCh<T, I> {
     /// Creates a new [`Dma`].
     #[inline]
     pub fn new(periph: DmaChPeriph<T>, int: I) -> Self {
@@ -90,7 +90,7 @@ impl<T: DmaChMap, I: IntToken<Att>> DmaCh<T, I> {
 
     /// Acquires the enabled state.
     #[inline]
-    pub fn as_enabled(&self, _token: &InventoryToken<DmaEn<T::DmaMap>>) -> &DmaChEn<T, I> {
+    pub fn as_enabled(&self, _token: &inventory::Token<DmaEn<T::DmaMap>>) -> &DmaChEn<T, I> {
         &self.0
     }
 
@@ -98,26 +98,26 @@ impl<T: DmaChMap, I: IntToken<Att>> DmaCh<T, I> {
     #[inline]
     pub fn as_enabled_mut(
         &mut self,
-        _token: &InventoryToken<DmaEn<T::DmaMap>>,
+        _token: &inventory::Token<DmaEn<T::DmaMap>>,
     ) -> &mut DmaChEn<T, I> {
         &mut self.0
     }
 
     /// Acquires the enabled state.
     #[inline]
-    pub fn into_enabled(self, token: InventoryToken<DmaEn<T::DmaMap>>) -> DmaChEn<T, I> {
-        // To be recreated in DmaChEn::into_disabled.
+    pub fn into_enabled(self, token: inventory::Token<DmaEn<T::DmaMap>>) -> DmaChEn<T, I> {
+        // To be recreated in `into_disabled()`.
         drop(token);
         self.0
     }
 }
 
-impl<T: DmaChMap, I: IntToken<Att>> DmaChEn<T, I> {
+impl<T: DmaChMap, I: IntToken> DmaChEn<T, I> {
     /// Releases the enabled state.
     #[inline]
-    pub fn into_disabled(self) -> (DmaCh<T, I>, InventoryToken<DmaEn<T::DmaMap>>) {
-        // An owned DmaChEn can come only from DmaCh::into_enabled.
-        let token = unsafe { InventoryToken::new() };
+    pub fn into_disabled(self) -> (DmaCh<T, I>, inventory::Token<DmaEn<T::DmaMap>>) {
+        // Restoring the token dropped in `into_enabled()`.
+        let token = unsafe { inventory::Token::new() };
         (DmaCh(self), token)
     }
 
@@ -179,17 +179,15 @@ impl<T: DmaChMap, I: IntToken<Att>> DmaChEn<T, I> {
         let tcif = self.periph.dma_isr_tcif;
         let cgif = self.periph.dma_ifcr_cgif;
         let ctcif = self.periph.dma_ifcr_ctcif;
-        self.int.add_try_future(fib::new(move || {
-            loop {
-                if teif.read_bit_band() {
-                    cgif.set_bit_band();
-                    break Err(DmaTransferError);
-                }
-                if tcif.read_bit_band() {
-                    ctcif.set_bit_band();
-                    break Ok(());
-                }
-                yield;
+        self.int.add_future(fib::new_fn(move || {
+            if teif.read_bit_band() {
+                cgif.set_bit_band();
+                fib::Complete(Err(DmaTransferError))
+            } else if tcif.read_bit_band() {
+                ctcif.set_bit_band();
+                fib::Complete(Ok(()))
+            } else {
+                fib::Yielded(())
             }
         }))
     }
@@ -200,24 +198,22 @@ impl<T: DmaChMap, I: IntToken<Att>> DmaChEn<T, I> {
         let htif = self.periph.dma_isr_htif;
         let cgif = self.periph.dma_ifcr_cgif;
         let chtif = self.periph.dma_ifcr_chtif;
-        self.int.add_try_future(fib::new(move || {
-            loop {
-                if teif.read_bit_band() {
-                    cgif.set_bit_band();
-                    break Err(DmaTransferError);
-                }
-                if htif.read_bit_band() {
-                    chtif.set_bit_band();
-                    break Ok(());
-                }
-                yield;
+        self.int.add_future(fib::new_fn(move || {
+            if teif.read_bit_band() {
+                cgif.set_bit_band();
+                fib::Complete(Err(DmaTransferError))
+            } else if htif.read_bit_band() {
+                chtif.set_bit_band();
+                fib::Complete(Ok(()))
+            } else {
+                fib::Yielded(())
             }
         }))
     }
 }
 
 #[allow(missing_docs)]
-impl<T: DmaChMap, I: IntToken<Att>> DmaChEn<T, I> {
+impl<T: DmaChMap, I: IntToken> DmaChEn<T, I> {
     #[inline]
     pub fn int(&self) -> &I {
         &self.int

@@ -1,8 +1,22 @@
+[![Crates.io](https://img.shields.io/crates/v/drone-stm32-drv.svg)](https://crates.io/crates/drone-stm32-drv)
+
 # drone-stm32-drv
 
-## [Documentation](https://docs.rs/drone-stm32-drv)
+STM32 peripheral drivers for Drone, an Embedded Operating System.
 
-Drone for STM32. Drivers.
+## Documentation
+
+- [Drone Book](https://book.drone-os.com/)
+- [API documentation](https://docs.rs/drone-stm32-drv/0.10.0)
+
+## Usage
+
+Place the following to the Cargo.toml:
+
+```toml
+[dependencies]
+drone-stm32-drv = { version = "0.10.0", features = [...] }
+```
 
 ## License
 

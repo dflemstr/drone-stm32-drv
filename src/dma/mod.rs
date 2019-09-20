@@ -1,7 +1,7 @@
 //! Direct memory access controller.
 
 use crate::common::DrvRcc;
-use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
+use drone_core::inventory::{self, Inventory0, Inventory1};
 use drone_cortex_m::reg::prelude::*;
 use drone_stm32_map::periph::dma::{DmaMap, DmaPeriph};
 
@@ -37,29 +37,35 @@ impl<T: DmaMap> Dma<T> {
     /// Releases the peripheral.
     #[inline]
     pub fn free(self) -> DmaPeriph<T> {
-        self.0.free().periph
+        Inventory0::free(self.0).periph
     }
 
     /// Enables DMA clock.
-    pub fn enable(&mut self) -> InventoryGuard<'_, DmaEn<T>> {
+    pub fn enable(&mut self) -> inventory::Guard<'_, DmaEn<T>> {
         self.setup();
-        self.0.guard()
+        Inventory0::guard(&mut self.0)
     }
 
     /// Enables DMA clock.
-    pub fn into_enabled(self) -> Inventory0<DmaEn<T>> {
+    pub fn into_enabled(self) -> Inventory1<DmaEn<T>> {
         self.setup();
-        self.0
+        let (enabled, token) = self.0.share1();
+        // To be recreated in `from_enabled()`.
+        drop(token);
+        enabled
     }
 
     /// Disables DMA clock.
-    pub fn from_enabled(mut enabled: Inventory0<DmaEn<T>>) -> Self {
-        enabled.teardown();
+    pub fn from_enabled(enabled: Inventory1<DmaEn<T>>) -> Self {
+        // Restoring the token dropped in `into_enabled()`.
+        let token = unsafe { inventory::Token::new() };
+        let mut enabled = enabled.merge1(token);
+        Inventory0::teardown(&mut enabled);
         Self(enabled)
     }
 
     fn setup(&self) {
-        let dmaen = &self.0.periph.rcc_ahb1enr_dmaen;
+        let dmaen = &self.0.periph.rcc_busenr_dmaen;
         if dmaen.read_bit() {
             panic!("DMA wasn't turned off");
         }
@@ -67,9 +73,9 @@ impl<T: DmaMap> Dma<T> {
     }
 }
 
-impl<T: DmaMap> InventoryResource for DmaEn<T> {
-    fn teardown(&mut self) {
-        self.periph.rcc_ahb1enr_dmaen.clear_bit()
+impl<T: DmaMap> inventory::Item for DmaEn<T> {
+    fn teardown(&mut self, _token: &mut inventory::GuardToken<Self>) {
+        self.periph.rcc_busenr_dmaen.clear_bit()
     }
 }
 
@@ -92,14 +98,14 @@ impl<T: DmaMap> DrvRcc for Dma<T> {
 
 impl<T: DmaMap> DrvRcc for DmaEn<T> {
     fn reset(&mut self) {
-        self.periph.rcc_ahb1rstr_dmarst.set_bit();
+        self.periph.rcc_busrstr_dmarst.set_bit();
     }
 
     fn disable_stop_mode(&self) {
-        self.periph.rcc_ahb1smenr_dmasmen.clear_bit();
+        self.periph.rcc_bussmenr_dmasmen.clear_bit();
     }
 
     fn enable_stop_mode(&self) {
-        self.periph.rcc_ahb1smenr_dmasmen.set_bit();
+        self.periph.rcc_bussmenr_dmasmen.set_bit();
     }
 }

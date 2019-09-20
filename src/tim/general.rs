@@ -1,4 +1,5 @@
 use super::{TimDiverged, TimPeriph};
+use core::num::NonZeroUsize;
 use drone_cortex_m::{
     drv::timer::{TimerInterval, TimerOverflow, TimerSleep, TimerStop},
     thr::prelude::*,
@@ -8,9 +9,9 @@ use drone_stm32_map::periph::tim::general::{GeneralTimMap, GeneralTimPeriph};
 /// General-purpose timer diverged peripheral.
 #[allow(missing_docs)]
 pub struct GeneralTimDiverged<T: GeneralTimMap> {
-    pub rcc_apbenr_timen: T::SRccApbenrTimen,
-    pub rcc_apbrstr_timrst: T::SRccApbrstrTimrst,
-    pub rcc_apbsmenr_timsmen: T::SRccApbsmenrTimsmen,
+    pub rcc_busenr_timen: T::SRccBusenrTimen,
+    pub rcc_busrstr_timrst: T::SRccBusrstrTimrst,
+    pub rcc_bussmenr_timsmen: T::SRccBussmenrTimsmen,
     pub tim_cr1: T::STimCr1,
     pub tim_cr2: T::STimCr2,
     pub tim_smcr: T::STimSmcrOpt,
@@ -43,9 +44,9 @@ impl<T: GeneralTimMap> TimPeriph for GeneralTimPeriph<T> {
     #[inline]
     fn diverge(self) -> Self::Diverged {
         GeneralTimDiverged {
-            rcc_apbenr_timen: self.rcc_apbenr_timen,
-            rcc_apbrstr_timrst: self.rcc_apbrstr_timrst,
-            rcc_apbsmenr_timsmen: self.rcc_apbsmenr_timsmen,
+            rcc_busenr_timen: self.rcc_busenr_timen,
+            rcc_busrstr_timrst: self.rcc_busrstr_timrst,
+            rcc_bussmenr_timsmen: self.rcc_bussmenr_timsmen,
             tim_cr1: self.tim_cr1,
             tim_cr2: self.tim_cr2,
             tim_smcr: self.tim_smcr,
@@ -75,53 +76,53 @@ impl<T: GeneralTimMap> TimPeriph for GeneralTimPeriph<T> {
 }
 
 impl<T: GeneralTimMap> TimDiverged for GeneralTimDiverged<T> {
-    type RccApbenr = T::SRccApbenr;
-    type RccApbenrTimen = T::SRccApbenrTimen;
-    type RccApbrstr = T::SRccApbrstr;
-    type RccApbrstrTimrst = T::SRccApbrstrTimrst;
-    type RccApbsmenr = T::SRccApbsmenr;
-    type RccApbsmenrTimsmen = T::SRccApbsmenrTimsmen;
+    type RccBusenr = T::SRccBusenr;
+    type RccBusenrTimen = T::SRccBusenrTimen;
+    type RccBusrstr = T::SRccBusrstr;
+    type RccBusrstrTimrst = T::SRccBusrstrTimrst;
+    type RccBussmenr = T::SRccBussmenr;
+    type RccBussmenrTimsmen = T::SRccBussmenrTimsmen;
 
     #[inline]
-    fn rcc_apbenr_timen(&self) -> &Self::RccApbenrTimen {
-        &self.rcc_apbenr_timen
+    fn rcc_busenr_timen(&self) -> &Self::RccBusenrTimen {
+        &self.rcc_busenr_timen
     }
 
     #[inline]
-    fn rcc_apbrstr_timrst(&self) -> &Self::RccApbrstrTimrst {
-        &self.rcc_apbrstr_timrst
+    fn rcc_busrstr_timrst(&self) -> &Self::RccBusrstrTimrst {
+        &self.rcc_busrstr_timrst
     }
 
     #[inline]
-    fn rcc_apbsmenr_timsmen(&self) -> &Self::RccApbsmenrTimsmen {
-        &self.rcc_apbsmenr_timsmen
+    fn rcc_bussmenr_timsmen(&self) -> &Self::RccBussmenrTimsmen {
+        &self.rcc_bussmenr_timsmen
     }
 
     #[inline]
-    fn presc(&mut self, _value: u16) {
+    fn presc(&mut self, _value: u32) {
         unimplemented!();
     }
 
     #[inline]
-    fn sleep<I: IntToken<Att>>(&mut self, _duration: usize, _int: I) -> TimerSleep<'_, Self> {
+    fn sleep<I: IntToken>(&mut self, _duration: u32, _int: I) -> TimerSleep<'_, Self> {
         unimplemented!()
     }
 
     #[inline]
-    fn interval<I: IntToken<Att>>(
+    fn interval<I: IntToken>(
         &mut self,
-        _duration: usize,
+        _duration: u32,
         _int: I,
-    ) -> TimerInterval<'_, Self, Result<(), TimerOverflow>> {
+    ) -> TimerInterval<'_, Self, Result<NonZeroUsize, TimerOverflow>> {
         unimplemented!()
     }
 
     #[inline]
-    fn interval_skip<I: IntToken<Att>>(
+    fn interval_skip<I: IntToken>(
         &mut self,
-        _duration: usize,
+        _duration: u32,
         _int: I,
-    ) -> TimerInterval<'_, Self, ()> {
+    ) -> TimerInterval<'_, Self, NonZeroUsize> {
         unimplemented!()
     }
 }

@@ -6,7 +6,7 @@ use crate::{
 };
 #[cfg(any(feature = "stm32l4s5", feature = "stm32l4s7", feature = "stm32l4s9"))]
 use core::ptr::read_volatile;
-use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
+use drone_core::inventory::{self, Inventory0, Inventory1};
 use drone_cortex_m::{fib, reg::prelude::*, thr::prelude::*};
 use drone_stm32_map::periph::{
     adc::{traits::*, AdcMap, AdcPeriph},
@@ -35,10 +35,10 @@ mod com;
 pub use self::com::*;
 
 /// ADC driver.
-pub struct Adc<T: AdcMap, I: IntToken<Att>>(Inventory0<AdcEn<T, I>>);
+pub struct Adc<T: AdcMap, I: IntToken>(Inventory0<AdcEn<T, I>>);
 
 /// ADC enabled driver.
-pub struct AdcEn<T: AdcMap, I: IntToken<Att>> {
+pub struct AdcEn<T: AdcMap, I: IntToken> {
     periph: AdcDiverged<T>,
     int: I,
 }
@@ -46,9 +46,9 @@ pub struct AdcEn<T: AdcMap, I: IntToken<Att>> {
 /// ADC diverged peripheral.
 #[allow(missing_docs)]
 pub struct AdcDiverged<T: AdcMap> {
-    pub rcc_ahb2enr_adcen: T::SRccAhb2EnrAdcen,
-    pub rcc_ahb2rstr_adcrst: T::SRccAhb2RstrAdcrst,
-    pub rcc_ahb2smenr_adcsmen: T::SRccAhb2SmenrAdcsmen,
+    pub rcc_busenr_adcen: T::SRccBusenrAdcen,
+    pub rcc_busrstr_adcrst: T::SRccBusrstrAdcrst,
+    pub rcc_bussmenr_adcsmen: T::SRccBussmenrAdcsmen,
     pub rcc_ccipr_adcsel: T::SRccCciprAdcsel,
     pub adc_isr: T::CAdcIsr,
     pub adc_ier: T::SAdcIer,
@@ -80,14 +80,14 @@ pub struct AdcDiverged<T: AdcMap> {
     pub adc_calfact: T::SAdcCalfact,
 }
 
-impl<T: AdcMap, I: IntToken<Att>> Adc<T, I> {
+impl<T: AdcMap, I: IntToken> Adc<T, I> {
     /// Creates a new [`Adc`].
     #[inline]
     pub fn new(periph: AdcPeriph<T>, int: I) -> Self {
         let periph = AdcDiverged {
-            rcc_ahb2enr_adcen: periph.rcc_ahb2enr_adcen,
-            rcc_ahb2rstr_adcrst: periph.rcc_ahb2rstr_adcrst,
-            rcc_ahb2smenr_adcsmen: periph.rcc_ahb2smenr_adcsmen,
+            rcc_busenr_adcen: periph.rcc_busenr_adcen,
+            rcc_busrstr_adcrst: periph.rcc_busrstr_adcrst,
+            rcc_bussmenr_adcsmen: periph.rcc_bussmenr_adcsmen,
             rcc_ccipr_adcsel: periph.rcc_ccipr_adcsel,
             adc_isr: periph.adc_isr.into_copy(),
             adc_ier: periph.adc_ier,
@@ -134,29 +134,35 @@ impl<T: AdcMap, I: IntToken<Att>> Adc<T, I> {
     /// Releases the peripheral.
     #[inline]
     pub fn free(self) -> AdcDiverged<T> {
-        self.0.free().periph
+        Inventory0::free(self.0).periph
     }
 
     /// Enables ADC clock.
-    pub fn enable(&mut self) -> InventoryGuard<'_, AdcEn<T, I>> {
+    pub fn enable(&mut self) -> inventory::Guard<'_, AdcEn<T, I>> {
         self.setup();
-        self.0.guard()
+        Inventory0::guard(&mut self.0)
     }
 
     /// Enables ADC clock.
-    pub fn into_enabled(self) -> Inventory0<AdcEn<T, I>> {
+    pub fn into_enabled(self) -> Inventory1<AdcEn<T, I>> {
         self.setup();
-        self.0
+        let (enabled, token) = self.0.share1();
+        // To be recreated in `from_enabled()`.
+        drop(token);
+        enabled
     }
 
     /// Disables ADC clock.
-    pub fn from_enabled(mut enabled: Inventory0<AdcEn<T, I>>) -> Self {
-        enabled.teardown();
+    pub fn from_enabled(enabled: Inventory1<AdcEn<T, I>>) -> Self {
+        // Restoring the token dropped in `into_enabled()`.
+        let token = unsafe { inventory::Token::new() };
+        let mut enabled = enabled.merge1(token);
+        Inventory0::teardown(&mut enabled);
         Self(enabled)
     }
 
     fn setup(&self) {
-        let adcen = &self.0.periph.rcc_ahb2enr_adcen;
+        let adcen = &self.0.periph.rcc_busenr_adcen;
         if adcen.read_bit() {
             panic!("ADC wasn't turned off");
         }
@@ -164,24 +170,23 @@ impl<T: AdcMap, I: IntToken<Att>> Adc<T, I> {
     }
 }
 
-impl<T: AdcMap, I: IntToken<Att>> AdcEn<T, I> {
+impl<T: AdcMap, I: IntToken> AdcEn<T, I> {
     /// Returns a future, which resolves on ADC ready event.
     pub fn ready(&self) -> impl Future<Output = ()> {
         let adrdy = *self.periph.adc_isr.adrdy();
-        self.int.add_future(fib::new(move || {
-            loop {
-                if adrdy.read_bit() {
-                    adrdy.set_bit();
-                    break;
-                }
-                yield;
+        self.int.add_future(fib::new_fn(move || {
+            if adrdy.read_bit() {
+                adrdy.set_bit();
+                fib::Complete(())
+            } else {
+                fib::Yielded(())
             }
         }))
     }
 }
 
 #[allow(missing_docs)]
-impl<T: AdcMap, I: IntToken<Att>> AdcEn<T, I> {
+impl<T: AdcMap, I: IntToken> AdcEn<T, I> {
     #[inline]
     pub fn int(&self) -> &I {
         &self.int
@@ -218,26 +223,26 @@ impl<T: AdcMap, I: IntToken<Att>> AdcEn<T, I> {
     }
 }
 
-impl<T: AdcMap, I: IntToken<Att>> InventoryResource for AdcEn<T, I> {
-    fn teardown(&mut self) {
-        self.periph.rcc_ahb2enr_adcen.clear_bit()
+impl<T: AdcMap, I: IntToken> inventory::Item for AdcEn<T, I> {
+    fn teardown(&mut self, _token: &mut inventory::GuardToken<Self>) {
+        self.periph.rcc_busenr_adcen.clear_bit()
     }
 }
 
-impl<T: AdcMap, I: IntToken<Att>, Rx: DmaChMap> DrvDmaRx<Rx> for Adc<T, I> {
+impl<T: AdcMap, I: IntToken, Rx: DmaChMap> DrvDmaRx<Rx> for Adc<T, I> {
     #[inline]
-    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
+    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) {
         self.0.dma_rx_paddr_init(dma_rx);
     }
 }
 
-impl<T: AdcMap, I: IntToken<Att>, Rx: DmaChMap> DrvDmaRx<Rx> for AdcEn<T, I> {
-    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
+impl<T: AdcMap, I: IntToken, Rx: DmaChMap> DrvDmaRx<Rx> for AdcEn<T, I> {
+    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) {
         unsafe { dma_rx.set_paddr(self.periph.adc_dr.to_ptr()) };
     }
 }
 
-impl<T: AdcMap, I: IntToken<Att>> DrvRcc for Adc<T, I> {
+impl<T: AdcMap, I: IntToken> DrvRcc for Adc<T, I> {
     #[inline]
     fn reset(&mut self) {
         self.0.reset();
@@ -254,28 +259,28 @@ impl<T: AdcMap, I: IntToken<Att>> DrvRcc for Adc<T, I> {
     }
 }
 
-impl<T: AdcMap, I: IntToken<Att>> DrvRcc for AdcEn<T, I> {
+impl<T: AdcMap, I: IntToken> DrvRcc for AdcEn<T, I> {
     fn reset(&mut self) {
-        self.periph.rcc_ahb2rstr_adcrst.set_bit();
+        self.periph.rcc_busrstr_adcrst.set_bit();
     }
 
     fn disable_stop_mode(&self) {
-        self.periph.rcc_ahb2smenr_adcsmen.clear_bit();
+        self.periph.rcc_bussmenr_adcsmen.clear_bit();
     }
 
     fn enable_stop_mode(&self) {
-        self.periph.rcc_ahb2smenr_adcsmen.set_bit();
+        self.periph.rcc_bussmenr_adcsmen.set_bit();
     }
 }
 
-impl<T: AdcMap, I: IntToken<Att>> DrvClockSel for Adc<T, I> {
+impl<T: AdcMap, I: IntToken> DrvClockSel for Adc<T, I> {
     #[inline]
     fn clock_sel(&self, value: u32) {
         self.0.clock_sel(value);
     }
 }
 
-impl<T: AdcMap, I: IntToken<Att>> DrvClockSel for AdcEn<T, I> {
+impl<T: AdcMap, I: IntToken> DrvClockSel for AdcEn<T, I> {
     fn clock_sel(&self, value: u32) {
         self.periph.rcc_ccipr_adcsel.write_bits(value);
     }

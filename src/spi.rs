@@ -8,7 +8,7 @@ use core::{
     fmt,
     ptr::{read_volatile, write_volatile},
 };
-use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
+use drone_core::inventory::{self, Inventory0, Inventory1};
 use drone_cortex_m::{reg::prelude::*, thr::prelude::*};
 use drone_stm32_map::periph::{
     dma::ch::DmaChMap,
@@ -27,10 +27,10 @@ pub enum SpiError {
 }
 
 /// SPI driver.
-pub struct Spi<T: SpiMap, I: IntToken<Att>>(Inventory0<SpiEn<T, I>>);
+pub struct Spi<T: SpiMap, I: IntToken>(Inventory0<SpiEn<T, I>>);
 
 /// SPI enabled driver.
-pub struct SpiEn<T: SpiMap, I: IntToken<Att>> {
+pub struct SpiEn<T: SpiMap, I: IntToken> {
     periph: SpiDiverged<T>,
     int: I,
 }
@@ -38,9 +38,9 @@ pub struct SpiEn<T: SpiMap, I: IntToken<Att>> {
 /// SPI diverged peripheral.
 #[allow(missing_docs)]
 pub struct SpiDiverged<T: SpiMap> {
-    pub rcc_apbenr_spien: T::SRccApbenrSpien,
-    pub rcc_apbrstr_spirst: T::SRccApbrstrSpirst,
-    pub rcc_apbsmenr_spismen: T::SRccApbsmenrSpismen,
+    pub rcc_busenr_spien: T::SRccBusenrSpien,
+    pub rcc_busrstr_spirst: T::SRccBusrstrSpirst,
+    pub rcc_bussmenr_spismen: T::SRccBussmenrSpismen,
     pub spi_cr1: T::SSpiCr1,
     pub spi_cr2: T::SSpiCr2,
     pub spi_crcpr: T::SSpiCrcpr,
@@ -50,14 +50,14 @@ pub struct SpiDiverged<T: SpiMap> {
     pub spi_txcrcr: T::SSpiTxcrcr,
 }
 
-impl<T: SpiMap, I: IntToken<Att>> Spi<T, I> {
+impl<T: SpiMap, I: IntToken> Spi<T, I> {
     /// Creates a new [`Spi`].
     #[inline]
     pub fn new(periph: SpiPeriph<T>, int: I) -> Self {
         let periph = SpiDiverged {
-            rcc_apbenr_spien: periph.rcc_apbenr_spien,
-            rcc_apbrstr_spirst: periph.rcc_apbrstr_spirst,
-            rcc_apbsmenr_spismen: periph.rcc_apbsmenr_spismen,
+            rcc_busenr_spien: periph.rcc_busenr_spien,
+            rcc_busrstr_spirst: periph.rcc_busrstr_spirst,
+            rcc_bussmenr_spismen: periph.rcc_bussmenr_spismen,
             spi_cr1: periph.spi_cr1,
             spi_cr2: periph.spi_cr2,
             spi_crcpr: periph.spi_crcpr,
@@ -82,29 +82,35 @@ impl<T: SpiMap, I: IntToken<Att>> Spi<T, I> {
     /// Releases the peripheral.
     #[inline]
     pub fn free(self) -> SpiDiverged<T> {
-        self.0.free().periph
+        Inventory0::free(self.0).periph
     }
 
     /// Enables SPI clock.
-    pub fn enable(&mut self) -> InventoryGuard<'_, SpiEn<T, I>> {
+    pub fn enable(&mut self) -> inventory::Guard<'_, SpiEn<T, I>> {
         self.setup();
-        self.0.guard()
+        Inventory0::guard(&mut self.0)
     }
 
     /// Enables SPI clock.
-    pub fn into_enabled(self) -> Inventory0<SpiEn<T, I>> {
+    pub fn into_enabled(self) -> Inventory1<SpiEn<T, I>> {
         self.setup();
-        self.0
+        let (enabled, token) = self.0.share1();
+        // To be recreated in `from_enabled()`.
+        drop(token);
+        enabled
     }
 
     /// Disables SPI clock.
-    pub fn from_enabled(mut enabled: Inventory0<SpiEn<T, I>>) -> Self {
-        enabled.teardown();
+    pub fn from_enabled(enabled: Inventory1<SpiEn<T, I>>) -> Self {
+        // Restoring the token dropped in `into_enabled()`.
+        let token = unsafe { inventory::Token::new() };
+        let mut enabled = enabled.merge1(token);
+        Inventory0::teardown(&mut enabled);
         Self(enabled)
     }
 
     fn setup(&self) {
-        let spien = &self.0.periph.rcc_apbenr_spien;
+        let spien = &self.0.periph.rcc_busenr_spien;
         if spien.read_bit() {
             panic!("SPI wasn't turned off");
         }
@@ -112,7 +118,7 @@ impl<T: SpiMap, I: IntToken<Att>> Spi<T, I> {
     }
 }
 
-impl<T: SpiMap, I: IntToken<Att>> SpiEn<T, I> {
+impl<T: SpiMap, I: IntToken> SpiEn<T, I> {
     /// Sets the size of a data frame to 8 bits.
     #[allow(unused_variables)]
     #[inline]
@@ -206,7 +212,7 @@ impl<T: SpiMap, I: IntToken<Att>> SpiEn<T, I> {
 }
 
 #[allow(missing_docs)]
-impl<T: SpiMap, I: IntToken<Att>> SpiEn<T, I> {
+impl<T: SpiMap, I: IntToken> SpiEn<T, I> {
     #[inline]
     pub fn int(&self) -> &I {
         &self.int
@@ -228,39 +234,39 @@ impl<T: SpiMap, I: IntToken<Att>> SpiEn<T, I> {
     }
 }
 
-impl<T: SpiMap, I: IntToken<Att>> InventoryResource for SpiEn<T, I> {
-    fn teardown(&mut self) {
-        self.periph.rcc_apbenr_spien.clear_bit()
+impl<T: SpiMap, I: IntToken> inventory::Item for SpiEn<T, I> {
+    fn teardown(&mut self, _token: &mut inventory::GuardToken<Self>) {
+        self.periph.rcc_busenr_spien.clear_bit()
     }
 }
 
-impl<T: SpiMap, I: IntToken<Att>, Rx: DmaChMap> DrvDmaRx<Rx> for Spi<T, I> {
+impl<T: SpiMap, I: IntToken, Rx: DmaChMap> DrvDmaRx<Rx> for Spi<T, I> {
     #[inline]
-    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
+    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) {
         self.0.dma_rx_paddr_init(dma_rx);
     }
 }
 
-impl<T: SpiMap, I: IntToken<Att>, Tx: DmaChMap> DrvDmaTx<Tx> for Spi<T, I> {
+impl<T: SpiMap, I: IntToken, Tx: DmaChMap> DrvDmaTx<Tx> for Spi<T, I> {
     #[inline]
-    fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Att>>) {
+    fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken>) {
         self.0.dma_tx_paddr_init(dma_tx);
     }
 }
 
-impl<T: SpiMap, I: IntToken<Att>, Rx: DmaChMap> DrvDmaRx<Rx> for SpiEn<T, I> {
-    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
+impl<T: SpiMap, I: IntToken, Rx: DmaChMap> DrvDmaRx<Rx> for SpiEn<T, I> {
+    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) {
         unsafe { dma_rx.set_paddr(self.periph.spi_dr.to_ptr()) };
     }
 }
 
-impl<T: SpiMap, I: IntToken<Att>, Tx: DmaChMap> DrvDmaTx<Tx> for SpiEn<T, I> {
-    fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Att>>) {
+impl<T: SpiMap, I: IntToken, Tx: DmaChMap> DrvDmaTx<Tx> for SpiEn<T, I> {
+    fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken>) {
         unsafe { dma_tx.set_paddr(self.periph.spi_dr.to_mut_ptr()) };
     }
 }
 
-impl<T: SpiMap, I: IntToken<Att>> DrvRcc for Spi<T, I> {
+impl<T: SpiMap, I: IntToken> DrvRcc for Spi<T, I> {
     #[inline]
     fn reset(&mut self) {
         self.0.reset();
@@ -277,26 +283,26 @@ impl<T: SpiMap, I: IntToken<Att>> DrvRcc for Spi<T, I> {
     }
 }
 
-impl<T: SpiMap, I: IntToken<Att>> DrvRcc for SpiEn<T, I> {
+impl<T: SpiMap, I: IntToken> DrvRcc for SpiEn<T, I> {
     fn reset(&mut self) {
-        self.periph.rcc_apbrstr_spirst.set_bit();
+        self.periph.rcc_busrstr_spirst.set_bit();
     }
 
     fn disable_stop_mode(&self) {
-        self.periph.rcc_apbsmenr_spismen.clear_bit();
+        self.periph.rcc_bussmenr_spismen.clear_bit();
     }
 
     fn enable_stop_mode(&self) {
-        self.periph.rcc_apbsmenr_spismen.set_bit();
+        self.periph.rcc_bussmenr_spismen.set_bit();
     }
 }
 
 impl fmt::Display for SpiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SpiError::Crcerr => write!(f, "SPI CRC mismatch."),
-            SpiError::Ovr => write!(f, "SPI queue overrun."),
-            SpiError::Modf => write!(f, "SPI mode fault."),
+            Self::Crcerr => write!(f, "SPI CRC mismatch."),
+            Self::Ovr => write!(f, "SPI queue overrun."),
+            Self::Modf => write!(f, "SPI mode fault."),
         }
     }
 }

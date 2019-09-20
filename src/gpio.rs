@@ -1,7 +1,7 @@
 //! General-purpose I/O.
 
 use crate::common::DrvRcc;
-use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
+use drone_core::inventory::{self, Inventory0, Inventory1};
 use drone_cortex_m::reg::prelude::*;
 use drone_stm32_map::periph::gpio::head::{GpioHeadMap, GpioHeadPeriph};
 
@@ -23,29 +23,35 @@ impl<T: GpioHeadMap> GpioHead<T> {
     /// Releases the peripheral.
     #[inline]
     pub fn free(self) -> GpioHeadPeriph<T> {
-        self.0.free().periph
+        Inventory0::free(self.0).periph
     }
 
     /// Enables the port clock.
-    pub fn enable(&mut self) -> InventoryGuard<'_, GpioHeadEn<T>> {
+    pub fn enable(&mut self) -> inventory::Guard<'_, GpioHeadEn<T>> {
         self.setup();
-        self.0.guard()
+        Inventory0::guard(&mut self.0)
     }
 
     /// Enables the port clock.
-    pub fn into_enabled(self) -> Inventory0<GpioHeadEn<T>> {
+    pub fn into_enabled(self) -> Inventory1<GpioHeadEn<T>> {
         self.setup();
-        self.0
+        let (enabled, token) = self.0.share1();
+        // To be recreated in `from_enabled()`.
+        drop(token);
+        enabled
     }
 
     /// Disables the port clock.
-    pub fn from_enabled(mut enabled: Inventory0<GpioHeadEn<T>>) -> Self {
-        enabled.teardown();
+    pub fn from_enabled(enabled: Inventory1<GpioHeadEn<T>>) -> Self {
+        // Restoring the token dropped in `into_enabled()`.
+        let token = unsafe { inventory::Token::new() };
+        let mut enabled = enabled.merge1(token);
+        Inventory0::teardown(&mut enabled);
         Self(enabled)
     }
 
     fn setup(&self) {
-        let gpioen = &self.0.periph.rcc_ahb2enr_gpioen;
+        let gpioen = &self.0.periph.rcc_busenr_gpioen;
         if gpioen.read_bit() {
             panic!("GPIO wasn't turned off");
         }
@@ -70,22 +76,22 @@ impl<T: GpioHeadMap> DrvRcc for GpioHead<T> {
     }
 }
 
-impl<T: GpioHeadMap> InventoryResource for GpioHeadEn<T> {
-    fn teardown(&mut self) {
-        self.periph.rcc_ahb2enr_gpioen.clear_bit()
+impl<T: GpioHeadMap> inventory::Item for GpioHeadEn<T> {
+    fn teardown(&mut self, _token: &mut inventory::GuardToken<Self>) {
+        self.periph.rcc_busenr_gpioen.clear_bit()
     }
 }
 
 impl<T: GpioHeadMap> DrvRcc for GpioHeadEn<T> {
     fn reset(&mut self) {
-        self.periph.rcc_ahb2rstr_gpiorst.set_bit();
+        self.periph.rcc_busrstr_gpiorst.set_bit();
     }
 
     fn disable_stop_mode(&self) {
-        self.periph.rcc_ahb2smenr_gpiosmen.clear_bit();
+        self.periph.rcc_bussmenr_gpiosmen.clear_bit();
     }
 
     fn enable_stop_mode(&self) {
-        self.periph.rcc_ahb2smenr_gpiosmen.set_bit();
+        self.periph.rcc_bussmenr_gpiosmen.set_bit();
     }
 }

@@ -6,14 +6,6 @@ pub struct AdcCom {
     periph: AdcComPeriph,
 }
 
-/// Acquires [`AdcCom`].
-#[macro_export]
-macro_rules! drv_adc_com {
-    ($reg:ident) => {
-        $crate::adc::AdcCom::new(::drone_stm32_map::periph::adc::periph_adc_com!($reg))
-    };
-}
-
 impl AdcCom {
     /// Creates a new [`AdcCom`].
     #[inline]

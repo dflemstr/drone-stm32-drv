@@ -1,4 +1,5 @@
 use super::{TimDiverged, TimDivergedClockSel, TimPeriph};
+use core::num::NonZeroUsize;
 use drone_cortex_m::{
     drv::timer::{TimerInterval, TimerOverflow, TimerSleep, TimerStop},
     thr::prelude::*,
@@ -8,9 +9,9 @@ use drone_stm32_map::periph::tim::low_power::{LowPowerTimMap, LowPowerTimPeriph}
 /// Low-power timer diverged peripheral.
 #[allow(missing_docs)]
 pub struct LowPowerTimDiverged<T: LowPowerTimMap> {
-    pub rcc_apb1enr_lptimen: T::SRccApb1EnrLptimen,
-    pub rcc_apb1rstr_lptimrst: T::SRccApb1RstrLptimrst,
-    pub rcc_apb1smenr_lptimsmen: T::SRccApb1SmenrLptimsmen,
+    pub rcc_busenr_lptimen: T::SRccBusenrLptimen,
+    pub rcc_busrstr_lptimrst: T::SRccBusrstrLptimrst,
+    pub rcc_bussmenr_lptimsmen: T::SRccBussmenrLptimsmen,
     pub rcc_ccipr_lptimsel: T::SRccCciprLptimsel,
     pub lptim_isr: T::SLptimIsr,
     pub lptim_icr: T::SLptimIcr,
@@ -29,9 +30,9 @@ impl<T: LowPowerTimMap> TimPeriph for LowPowerTimPeriph<T> {
     #[inline]
     fn diverge(self) -> Self::Diverged {
         LowPowerTimDiverged {
-            rcc_apb1enr_lptimen: self.rcc_apb1enr_lptimen,
-            rcc_apb1rstr_lptimrst: self.rcc_apb1rstr_lptimrst,
-            rcc_apb1smenr_lptimsmen: self.rcc_apb1smenr_lptimsmen,
+            rcc_busenr_lptimen: self.rcc_busenr_lptimen,
+            rcc_busrstr_lptimrst: self.rcc_busrstr_lptimrst,
+            rcc_bussmenr_lptimsmen: self.rcc_bussmenr_lptimsmen,
             rcc_ccipr_lptimsel: self.rcc_ccipr_lptimsel,
             lptim_isr: self.lptim_isr,
             lptim_icr: self.lptim_icr,
@@ -47,53 +48,53 @@ impl<T: LowPowerTimMap> TimPeriph for LowPowerTimPeriph<T> {
 }
 
 impl<T: LowPowerTimMap> TimDiverged for LowPowerTimDiverged<T> {
-    type RccApbenr = T::SRccApb1Enr;
-    type RccApbenrTimen = T::SRccApb1EnrLptimen;
-    type RccApbrstr = T::SRccApb1Rstr;
-    type RccApbrstrTimrst = T::SRccApb1RstrLptimrst;
-    type RccApbsmenr = T::SRccApb1Smenr;
-    type RccApbsmenrTimsmen = T::SRccApb1SmenrLptimsmen;
+    type RccBusenr = T::SRccBusenr;
+    type RccBusenrTimen = T::SRccBusenrLptimen;
+    type RccBusrstr = T::SRccBusrstr;
+    type RccBusrstrTimrst = T::SRccBusrstrLptimrst;
+    type RccBussmenr = T::SRccBussmenr;
+    type RccBussmenrTimsmen = T::SRccBussmenrLptimsmen;
 
     #[inline]
-    fn rcc_apbenr_timen(&self) -> &Self::RccApbenrTimen {
-        &self.rcc_apb1enr_lptimen
+    fn rcc_busenr_timen(&self) -> &Self::RccBusenrTimen {
+        &self.rcc_busenr_lptimen
     }
 
     #[inline]
-    fn rcc_apbrstr_timrst(&self) -> &Self::RccApbrstrTimrst {
-        &self.rcc_apb1rstr_lptimrst
+    fn rcc_busrstr_timrst(&self) -> &Self::RccBusrstrTimrst {
+        &self.rcc_busrstr_lptimrst
     }
 
     #[inline]
-    fn rcc_apbsmenr_timsmen(&self) -> &Self::RccApbsmenrTimsmen {
-        &self.rcc_apb1smenr_lptimsmen
+    fn rcc_bussmenr_timsmen(&self) -> &Self::RccBussmenrTimsmen {
+        &self.rcc_bussmenr_lptimsmen
     }
 
     #[inline]
-    fn presc(&mut self, _value: u16) {
+    fn presc(&mut self, _value: u32) {
         unimplemented!();
     }
 
     #[inline]
-    fn sleep<I: IntToken<Att>>(&mut self, _duration: usize, _int: I) -> TimerSleep<'_, Self> {
+    fn sleep<I: IntToken>(&mut self, _duration: u32, _int: I) -> TimerSleep<'_, Self> {
         unimplemented!()
     }
 
     #[inline]
-    fn interval<I: IntToken<Att>>(
+    fn interval<I: IntToken>(
         &mut self,
-        _duration: usize,
+        _duration: u32,
         _int: I,
-    ) -> TimerInterval<'_, Self, Result<(), TimerOverflow>> {
+    ) -> TimerInterval<'_, Self, Result<NonZeroUsize, TimerOverflow>> {
         unimplemented!()
     }
 
     #[inline]
-    fn interval_skip<I: IntToken<Att>>(
+    fn interval_skip<I: IntToken>(
         &mut self,
-        _duration: usize,
+        _duration: u32,
         _int: I,
-    ) -> TimerInterval<'_, Self, ()> {
+    ) -> TimerInterval<'_, Self, NonZeroUsize> {
         unimplemented!()
     }
 }

@@ -1,10 +1,20 @@
-//! Drone for STM32. Drivers.
+//! STM32 peripheral drivers for Drone, an Embedded Operating System.
+//!
+//! # Documentation
+//!
+//! - [Drone Book](https://book.drone-os.com/)
+//! - [API documentation](https://docs.rs/drone-stm32-drv/0.10.0)
+//!
+//! # Usage
+//!
+//! Place the following to the Cargo.toml:
+//!
+//! ```toml
+//! [dependencies]
+//! drone-stm32-drv = { version = "0.10.0", features = [...] }
+//! ```
 
-#![feature(async_await)]
-#![feature(generators)]
 #![feature(prelude_import)]
-#![no_std]
-#![deny(bare_trait_objects)]
 #![deny(elided_lifetimes_in_paths)]
 #![warn(missing_docs)]
 #![warn(clippy::pedantic)]
@@ -13,8 +23,7 @@
     clippy::module_name_repetitions,
     clippy::similar_names
 )]
-#![cfg_attr(test, feature(allocator_api, allocator_internals))]
-#![cfg_attr(test, default_lib_allocator)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod adc;
 pub mod common;
@@ -32,19 +41,3 @@ pub use drone_cortex_m::drv::*;
 #[prelude_import]
 #[allow(unused_imports)]
 use drone_cortex_m::prelude::*;
-
-#[cfg(test)]
-drone_core::heap! {
-    struct Heap;
-    size = 0x40000;
-    pools = [
-        [0x4; 0x4000],
-        [0x20; 0x800],
-        [0x100; 0x100],
-        [0x800; 0x20],
-    ];
-}
-
-#[cfg(test)]
-#[global_allocator]
-static mut GLOBAL: Heap = Heap::new();

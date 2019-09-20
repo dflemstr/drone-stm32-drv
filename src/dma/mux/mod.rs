@@ -1,7 +1,7 @@
 //! DMA request multiplexer.
 
 use crate::common::DrvRcc;
-use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
+use drone_core::inventory::{self, Inventory0, Inventory1};
 use drone_cortex_m::reg::prelude::*;
 use drone_stm32_map::periph::dma::mux::{DmamuxMap, DmamuxPeriph};
 
@@ -28,29 +28,35 @@ impl<T: DmamuxMap> Dmamux<T> {
     /// Releases the peripheral.
     #[inline]
     pub fn free(self) -> DmamuxPeriph<T> {
-        self.0.free().periph
+        Inventory0::free(self.0).periph
     }
 
     /// Enables DMAMUX clock.
-    pub fn enable(&mut self) -> InventoryGuard<'_, DmamuxEn<T>> {
+    pub fn enable(&mut self) -> inventory::Guard<'_, DmamuxEn<T>> {
         self.setup();
-        self.0.guard()
+        Inventory0::guard(&mut self.0)
     }
 
     /// Enables DMAMUX clock.
-    pub fn into_enabled(self) -> Inventory0<DmamuxEn<T>> {
+    pub fn into_enabled(self) -> Inventory1<DmamuxEn<T>> {
         self.setup();
-        self.0
+        let (enabled, token) = self.0.share1();
+        // To be recreated in `from_enabled()`.
+        drop(token);
+        enabled
     }
 
     /// Disables DMAMUX clock.
-    pub fn from_enabled(mut enabled: Inventory0<DmamuxEn<T>>) -> Self {
-        enabled.teardown();
+    pub fn from_enabled(enabled: Inventory1<DmamuxEn<T>>) -> Self {
+        // Restoring the token dropped in `into_enabled()`.
+        let token = unsafe { inventory::Token::new() };
+        let mut enabled = enabled.merge1(token);
+        Inventory0::teardown(&mut enabled);
         Self(enabled)
     }
 
     fn setup(&self) {
-        let dmamuxen = &self.0.periph.rcc_ahb1enr_dmamuxen;
+        let dmamuxen = &self.0.periph.rcc_busenr_dmamuxen;
         if dmamuxen.read_bit() {
             panic!("DMAMUX wasn't turned off");
         }
@@ -58,9 +64,9 @@ impl<T: DmamuxMap> Dmamux<T> {
     }
 }
 
-impl<T: DmamuxMap> InventoryResource for DmamuxEn<T> {
-    fn teardown(&mut self) {
-        self.periph.rcc_ahb1enr_dmamuxen.clear_bit()
+impl<T: DmamuxMap> inventory::Item for DmamuxEn<T> {
+    fn teardown(&mut self, _token: &mut inventory::GuardToken<Self>) {
+        self.periph.rcc_busenr_dmamuxen.clear_bit()
     }
 }
 
@@ -83,14 +89,14 @@ impl<T: DmamuxMap> DrvRcc for Dmamux<T> {
 
 impl<T: DmamuxMap> DrvRcc for DmamuxEn<T> {
     fn reset(&mut self) {
-        self.periph.rcc_ahb1rstr_dmamuxrst.set_bit();
+        self.periph.rcc_busrstr_dmamuxrst.set_bit();
     }
 
     fn disable_stop_mode(&self) {
-        self.periph.rcc_ahb1smenr_dmamuxsmen.clear_bit();
+        self.periph.rcc_bussmenr_dmamuxsmen.clear_bit();
     }
 
     fn enable_stop_mode(&self) {
-        self.periph.rcc_ahb1smenr_dmamuxsmen.set_bit();
+        self.periph.rcc_bussmenr_dmamuxsmen.set_bit();
     }
 }

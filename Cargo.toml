@@ -1,15 +1,22 @@
 [package]
 name = "drone-stm32-drv"
-version = "0.9.0"
+version = "0.10.0"
 authors = ["Valentine Valyaeff <valentine.valyaeff@gmail.com>"]
 edition = "2018"
-description = "Drone for STM32. Peripheral drivers."
+repository = "https://github.com/centosa/drone-stm32-drv"
+documentation = "https://docs.rs/drone-stm32-drv/0.10.0"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/drone-os/drone-stm32-drv"
+description = """
+STM32 peripheral drivers for Drone, an Embedded Operating System.
+"""
+
+[badges]
+maintenance = { status = "experimental" }
 
 [features]
 default = []
+std = ["drone-core/std", "drone-cortex-m/std", "futures-preview/std"]
 stm32f100 = ["drone-stm32-map/stm32f100"]
 stm32f101 = ["drone-stm32-map/stm32f101"]
 stm32f102 = ["drone-stm32-map/stm32f102"]
@@ -27,29 +34,9 @@ stm32l4s5 = ["drone-stm32-map/stm32l4s5"]
 stm32l4s7 = ["drone-stm32-map/stm32l4s7"]
 stm32l4s9 = ["drone-stm32-map/stm32l4s9"]
 
-[dependencies.drone-core]
-version = "0.9.0"
-git = "https://github.com/drone-os/drone-core"
-# path = "../drone-core"
-
-[dependencies.drone-cortex-m]
-version = "0.9.0"
-git = "https://github.com/drone-os/drone-cortex-m"
-# path = "../drone-cortex-m"
-
-[dependencies.drone-stm32-map]
-version = "0.9.0"
-git = "https://github.com/drone-os/drone-stm32-map"
-# path = "../drone-stm32-map"
-
-[dependencies.core]
-version = "0.1"
-git = "https://github.com/drone-os/drone-async-await"
-# path = "../drone-async-await"
-
 [dependencies]
+core = { version = "0.10.0", package = "libcore-drone", path = "../../drone-os/libcore-drone" }
+drone-core = { version = "0.10.0", path = "../../drone-os/drone-core" }
+drone-cortex-m = { version = "0.10.0", path = "../../drone-os/drone-cortex-m" }
+drone-stm32-map = { version = "0.10.0", path = "../../drone-os/drone-stm32-map" }
 futures-preview = { version = "0.3.0-alpha", default-features = false }
-
-[dev-dependencies.test]
-version = "0.2"
-git = "https://github.com/drone-os/drone-test"

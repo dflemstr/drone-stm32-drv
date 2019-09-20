@@ -5,7 +5,7 @@ use crate::{
     dma::DmaChEn,
 };
 use core::{fmt, ptr::read_volatile};
-use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
+use drone_core::inventory::{self, Inventory0, Inventory1};
 use drone_cortex_m::{
     fib::{self, Fiber},
     reg::prelude::*,
@@ -22,10 +22,10 @@ use futures::prelude::*;
 pub struct UartRxOverflow;
 
 /// UART driver.
-pub struct Uart<T: UartMap, I: IntToken<Att>>(Inventory0<UartEn<T, I>>);
+pub struct Uart<T: UartMap, I: IntToken>(Inventory0<UartEn<T, I>>);
 
 /// UART enabled driver.
-pub struct UartEn<T: UartMap, I: IntToken<Att>> {
+pub struct UartEn<T: UartMap, I: IntToken> {
     periph: UartDiverged<T>,
     int: I,
 }
@@ -33,9 +33,9 @@ pub struct UartEn<T: UartMap, I: IntToken<Att>> {
 /// UART diverged peripheral.
 #[allow(missing_docs)]
 pub struct UartDiverged<T: UartMap> {
-    pub rcc_apbenr_uarten: T::SRccApbenrUarten,
-    pub rcc_apbrstr_uartrst: T::SRccApbrstrUartrst,
-    pub rcc_apbsmenr_uartsmen: T::SRccApbsmenrUartsmen,
+    pub rcc_busenr_uarten: T::SRccBusenrUarten,
+    pub rcc_busrstr_uartrst: T::SRccBusrstrUartrst,
+    pub rcc_bussmenr_uartsmen: T::SRccBussmenrUartsmen,
     pub rcc_ccipr_uartsel: T::SRccCciprUartsel,
     pub uart_cr1: T::CUartCr1,
     pub uart_cr2: T::SUartCr2,
@@ -50,14 +50,14 @@ pub struct UartDiverged<T: UartMap> {
     pub uart_tdr: T::SUartTdr,
 }
 
-impl<T: UartMap, I: IntToken<Att>> Uart<T, I> {
+impl<T: UartMap, I: IntToken> Uart<T, I> {
     /// Creates a new [`Uart`].
     #[inline]
     pub fn new(periph: UartPeriph<T>, int: I) -> Self {
         let periph = UartDiverged {
-            rcc_apbenr_uarten: periph.rcc_apbenr_uarten,
-            rcc_apbrstr_uartrst: periph.rcc_apbrstr_uartrst,
-            rcc_apbsmenr_uartsmen: periph.rcc_apbsmenr_uartsmen,
+            rcc_busenr_uarten: periph.rcc_busenr_uarten,
+            rcc_busrstr_uartrst: periph.rcc_busrstr_uartrst,
+            rcc_bussmenr_uartsmen: periph.rcc_bussmenr_uartsmen,
             rcc_ccipr_uartsel: periph.rcc_ccipr_uartsel,
             uart_cr1: periph.uart_cr1.into_copy(),
             uart_cr2: periph.uart_cr2,
@@ -87,29 +87,35 @@ impl<T: UartMap, I: IntToken<Att>> Uart<T, I> {
     /// Releases the peripheral.
     #[inline]
     pub fn free(self) -> UartDiverged<T> {
-        self.0.free().periph
+        Inventory0::free(self.0).periph
     }
 
     /// Enables UART clock.
-    pub fn enable(&mut self) -> InventoryGuard<'_, UartEn<T, I>> {
+    pub fn enable(&mut self) -> inventory::Guard<'_, UartEn<T, I>> {
         self.setup();
-        self.0.guard()
+        Inventory0::guard(&mut self.0)
     }
 
     /// Enables UART clock.
-    pub fn into_enabled(self) -> Inventory0<UartEn<T, I>> {
+    pub fn into_enabled(self) -> Inventory1<UartEn<T, I>> {
         self.setup();
-        self.0
+        let (enabled, token) = self.0.share1();
+        // To be recreated in `from_enabled()`.
+        drop(token);
+        enabled
     }
 
     /// Disables UART clock.
-    pub fn from_enabled(mut enabled: Inventory0<UartEn<T, I>>) -> Self {
-        enabled.teardown();
+    pub fn from_enabled(enabled: Inventory1<UartEn<T, I>>) -> Self {
+        // Restoring the token dropped in `into_enabled()`.
+        let token = unsafe { inventory::Token::new() };
+        let mut enabled = enabled.merge1(token);
+        Inventory0::teardown(&mut enabled);
         Self(enabled)
     }
 
     fn setup(&self) {
-        let uarten = &self.0.periph.rcc_apbenr_uarten;
+        let uarten = &self.0.periph.rcc_busenr_uarten;
         if uarten.read_bit() {
             panic!("UART wasn't turned off");
         }
@@ -117,18 +123,17 @@ impl<T: UartMap, I: IntToken<Att>> Uart<T, I> {
     }
 }
 
-impl<T: UartMap, I: IntToken<Att>> UartEn<T, I> {
+impl<T: UartMap, I: IntToken> UartEn<T, I> {
     /// Returns a future, which resolves on transmission complete event.
     pub fn transmission_complete(&self) -> impl Future<Output = ()> {
         let tc = *self.periph.uart_isr.tc();
         let tcie = *self.periph.uart_cr1.tcie();
-        self.int.add_future(fib::new(move || {
-            loop {
-                if tc.read_bit_band() {
-                    tcie.clear_bit();
-                    break;
-                }
-                yield;
+        self.int.add_future(fib::new_fn(move || {
+            if tc.read_bit_band() {
+                tcie.clear_bit();
+                fib::Complete(())
+            } else {
+                fib::Yielded(())
             }
         }))
     }
@@ -155,52 +160,51 @@ impl<T: UartMap, I: IntToken<Att>> UartEn<T, I> {
     fn rx_stream_fib<R>(&self) -> impl Fiber<Input = (), Yield = Option<u8>, Return = R> {
         let rxne = *self.periph.uart_isr.rxne();
         let rdr = self.periph.uart_rdr;
-        fib::new(move || {
-            loop {
-                if rxne.read_bit_band() {
-                    let byte = unsafe { read_volatile(rdr.to_ptr() as *const _) };
-                    yield Some(byte);
-                }
-                yield None;
+        fib::new_fn(move || {
+            if rxne.read_bit_band() {
+                let byte = unsafe { read_volatile(rdr.to_ptr() as *const _) };
+                fib::Yielded(Some(byte))
+            } else {
+                fib::Yielded(None)
             }
         })
     }
 }
 
-impl<T: UartMap, I: IntToken<Att>> InventoryResource for UartEn<T, I> {
-    fn teardown(&mut self) {
-        self.periph.rcc_apbenr_uarten.clear_bit()
+impl<T: UartMap, I: IntToken> inventory::Item for UartEn<T, I> {
+    fn teardown(&mut self, _token: &mut inventory::GuardToken<Self>) {
+        self.periph.rcc_busenr_uarten.clear_bit()
     }
 }
 
-impl<T: UartMap, I: IntToken<Att>, Rx: DmaChMap> DrvDmaRx<Rx> for Uart<T, I> {
+impl<T: UartMap, I: IntToken, Rx: DmaChMap> DrvDmaRx<Rx> for Uart<T, I> {
     #[inline]
-    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
+    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) {
         self.0.dma_rx_paddr_init(dma_rx);
     }
 }
 
-impl<T: UartMap, I: IntToken<Att>, Tx: DmaChMap> DrvDmaTx<Tx> for Uart<T, I> {
+impl<T: UartMap, I: IntToken, Tx: DmaChMap> DrvDmaTx<Tx> for Uart<T, I> {
     #[inline]
-    fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Att>>) {
+    fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken>) {
         self.0.dma_tx_paddr_init(dma_tx);
     }
 }
 
-impl<T: UartMap, I: IntToken<Att>, Rx: DmaChMap> DrvDmaRx<Rx> for UartEn<T, I> {
-    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
+impl<T: UartMap, I: IntToken, Rx: DmaChMap> DrvDmaRx<Rx> for UartEn<T, I> {
+    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) {
         unsafe { dma_rx.set_paddr(self.periph.uart_rdr.to_ptr()) };
     }
 }
 
-impl<T: UartMap, I: IntToken<Att>, Tx: DmaChMap> DrvDmaTx<Tx> for UartEn<T, I> {
-    fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Att>>) {
+impl<T: UartMap, I: IntToken, Tx: DmaChMap> DrvDmaTx<Tx> for UartEn<T, I> {
+    fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken>) {
         unsafe { dma_tx.set_paddr(self.periph.uart_tdr.to_mut_ptr()) };
     }
 }
 
 #[allow(missing_docs)]
-impl<T: UartMap, I: IntToken<Att>> UartEn<T, I> {
+impl<T: UartMap, I: IntToken> UartEn<T, I> {
     #[inline]
     pub fn brr(&self) -> &T::SUartBrr {
         &self.periph.uart_brr
@@ -222,7 +226,7 @@ impl<T: UartMap, I: IntToken<Att>> UartEn<T, I> {
     }
 }
 
-impl<T: UartMap, I: IntToken<Att>> DrvRcc for Uart<T, I> {
+impl<T: UartMap, I: IntToken> DrvRcc for Uart<T, I> {
     #[inline]
     fn reset(&mut self) {
         self.0.reset();
@@ -239,28 +243,28 @@ impl<T: UartMap, I: IntToken<Att>> DrvRcc for Uart<T, I> {
     }
 }
 
-impl<T: UartMap, I: IntToken<Att>> DrvRcc for UartEn<T, I> {
+impl<T: UartMap, I: IntToken> DrvRcc for UartEn<T, I> {
     fn reset(&mut self) {
-        self.periph.rcc_apbrstr_uartrst.set_bit();
+        self.periph.rcc_busrstr_uartrst.set_bit();
     }
 
     fn disable_stop_mode(&self) {
-        self.periph.rcc_apbsmenr_uartsmen.clear_bit();
+        self.periph.rcc_bussmenr_uartsmen.clear_bit();
     }
 
     fn enable_stop_mode(&self) {
-        self.periph.rcc_apbsmenr_uartsmen.set_bit();
+        self.periph.rcc_bussmenr_uartsmen.set_bit();
     }
 }
 
-impl<T: UartMap, I: IntToken<Att>> DrvClockSel for Uart<T, I> {
+impl<T: UartMap, I: IntToken> DrvClockSel for Uart<T, I> {
     #[inline]
     fn clock_sel(&self, value: u32) {
         self.0.clock_sel(value);
     }
 }
 
-impl<T: UartMap, I: IntToken<Att>> DrvClockSel for UartEn<T, I> {
+impl<T: UartMap, I: IntToken> DrvClockSel for UartEn<T, I> {
     fn clock_sel(&self, value: u32) {
         self.periph.rcc_ccipr_uartsel.write_bits(value);
     }

@@ -6,7 +6,7 @@ use crate::{
     select3::{Output3, Select3},
 };
 use core::fmt;
-use drone_core::inventory::{Inventory0, InventoryGuard, InventoryResource};
+use drone_core::inventory::{self, Inventory0, Inventory1};
 use drone_cortex_m::{fib, reg::prelude::*, thr::prelude::*};
 use drone_stm32_map::periph::{
     dma::ch::{traits::*, DmaChMap},
@@ -52,10 +52,10 @@ pub enum I2CBreak {
 }
 
 /// I2C driver.
-pub struct I2C<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>>(Inventory0<I2CEn<T, Ev, Er>>);
+pub struct I2C<T: I2CMap, Ev: IntToken, Er: IntToken>(Inventory0<I2CEn<T, Ev, Er>>);
 
 /// I2C enabled driver.
-pub struct I2CEn<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> {
+pub struct I2CEn<T: I2CMap, Ev: IntToken, Er: IntToken> {
     periph: I2CDiverged<T>,
     int_ev: Ev,
     int_er: Er,
@@ -64,9 +64,9 @@ pub struct I2CEn<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> {
 /// I2C diverged peripheral.
 #[allow(missing_docs)]
 pub struct I2CDiverged<T: I2CMap> {
-    pub rcc_apb1enr_i2cen: T::SRccApb1EnrI2Cen,
-    pub rcc_apb1rstr_i2crst: T::SRccApb1RstrI2Crst,
-    pub rcc_apb1smenr_i2csmen: T::SRccApb1SmenrI2Csmen,
+    pub rcc_busenr_i2cen: T::SRccBusenrI2Cen,
+    pub rcc_busrstr_i2crst: T::SRccBusrstrI2Crst,
+    pub rcc_bussmenr_i2csmen: T::SRccBussmenrI2Csmen,
     pub rcc_ccipr_i2csel: T::SRccCciprI2Csel,
     pub i2c_cr1: T::SI2CCr1,
     pub i2c_cr2: T::SI2CCr2,
@@ -81,14 +81,14 @@ pub struct I2CDiverged<T: I2CMap> {
     pub i2c_txdr: T::SI2CTxdr,
 }
 
-impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2C<T, Ev, Er> {
+impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2C<T, Ev, Er> {
     /// Creates a new [`I2C`].
     #[inline]
     pub fn new(periph: I2CPeriph<T>, int_ev: Ev, int_er: Er) -> Self {
         let periph = I2CDiverged {
-            rcc_apb1enr_i2cen: periph.rcc_apb1enr_i2cen,
-            rcc_apb1rstr_i2crst: periph.rcc_apb1rstr_i2crst,
-            rcc_apb1smenr_i2csmen: periph.rcc_apb1smenr_i2csmen,
+            rcc_busenr_i2cen: periph.rcc_busenr_i2cen,
+            rcc_busrstr_i2crst: periph.rcc_busrstr_i2crst,
+            rcc_bussmenr_i2csmen: periph.rcc_bussmenr_i2csmen,
             rcc_ccipr_i2csel: periph.rcc_ccipr_i2csel,
             i2c_cr1: periph.i2c_cr1,
             i2c_cr2: periph.i2c_cr2,
@@ -126,29 +126,35 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2C<T, Ev, Er> {
     /// Releases the peripheral.
     #[inline]
     pub fn free(self) -> I2CDiverged<T> {
-        self.0.free().periph
+        Inventory0::free(self.0).periph
     }
 
     /// Enables I2C clock.
-    pub fn enable(&mut self) -> InventoryGuard<'_, I2CEn<T, Ev, Er>> {
+    pub fn enable(&mut self) -> inventory::Guard<'_, I2CEn<T, Ev, Er>> {
         self.setup();
-        self.0.guard()
+        Inventory0::guard(&mut self.0)
     }
 
     /// Enables I2C clock.
-    pub fn into_enabled(self) -> Inventory0<I2CEn<T, Ev, Er>> {
+    pub fn into_enabled(self) -> Inventory1<I2CEn<T, Ev, Er>> {
         self.setup();
-        self.0
+        let (enabled, token) = self.0.share1();
+        // To be recreated in `from_enabled()`.
+        drop(token);
+        enabled
     }
 
     /// Disables I2C clock.
-    pub fn from_enabled(mut enabled: Inventory0<I2CEn<T, Ev, Er>>) -> Self {
-        enabled.teardown();
+    pub fn from_enabled(enabled: Inventory1<I2CEn<T, Ev, Er>>) -> Self {
+        // Restoring the token dropped in `into_enabled()`.
+        let token = unsafe { inventory::Token::new() };
+        let mut enabled = enabled.merge1(token);
+        Inventory0::teardown(&mut enabled);
         Self(enabled)
     }
 
     fn setup(&self) {
-        let i2cen = &self.0.periph.rcc_apb1enr_i2cen;
+        let i2cen = &self.0.periph.rcc_busenr_i2cen;
         if i2cen.read_bit() {
             panic!("I2C wasn't turned off");
         }
@@ -156,7 +162,7 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2C<T, Ev, Er> {
     }
 }
 
-impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
+impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
     /// Reads bytes to `buf` from `slave_addr`. Leaves the session open.
     ///
     /// # Panics
@@ -164,7 +170,7 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
     /// If length of `buf` is greater than 255.
     pub fn read<'a, Rx: DmaChMap>(
         &'a self,
-        dma_rx: &'a DmaChEn<Rx, impl IntToken<Att>>,
+        dma_rx: &'a DmaChEn<Rx, impl IntToken>,
         buf: &'a mut [u8],
         slave_addr: u8,
         i2c_cr1_val: T::I2CCr1Val,
@@ -180,7 +186,7 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
     /// If length of `buf` is greater than 255.
     pub fn read_and_stop<'a, Rx: DmaChMap>(
         &'a self,
-        dma_rx: &'a DmaChEn<Rx, impl IntToken<Att>>,
+        dma_rx: &'a DmaChEn<Rx, impl IntToken>,
         buf: &'a mut [u8],
         slave_addr: u8,
         i2c_cr1_val: T::I2CCr1Val,
@@ -196,7 +202,7 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
     /// If length of `buf` is greater than 255.
     pub fn write<'a, Tx: DmaChMap>(
         &'a self,
-        dma_tx: &'a DmaChEn<Tx, impl IntToken<Att>>,
+        dma_tx: &'a DmaChEn<Tx, impl IntToken>,
         buf: &'a [u8],
         slave_addr: u8,
         i2c_cr1_val: T::I2CCr1Val,
@@ -212,7 +218,7 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
     /// If length of `buf` is greater than 255.
     pub fn write_and_stop<'a, Tx: DmaChMap>(
         &'a self,
-        dma_tx: &'a DmaChEn<Tx, impl IntToken<Att>>,
+        dma_tx: &'a DmaChEn<Tx, impl IntToken>,
         buf: &'a [u8],
         slave_addr: u8,
         i2c_cr1_val: T::I2CCr1Val,
@@ -235,33 +241,27 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
         let timoutcf = *self.periph.i2c_icr.timoutcf();
         let alertcf = *self.periph.i2c_icr.alertcf();
         let peccf = *self.periph.i2c_icr.peccf();
-        self.int_er.add_future(fib::new(move || {
-            loop {
-                if berr.read_bit_band() {
-                    berrcf.set_bit_band();
-                    break I2CError::Berr;
-                }
-                if ovr.read_bit_band() {
-                    ovrcf.set_bit_band();
-                    break I2CError::Ovr;
-                }
-                if arlo.read_bit_band() {
-                    arlocf.set_bit_band();
-                    break I2CError::Arlo;
-                }
-                if timeout.read_bit_band() {
-                    timoutcf.set_bit_band();
-                    break I2CError::Timeout;
-                }
-                if alert.read_bit_band() {
-                    alertcf.set_bit_band();
-                    break I2CError::Alert;
-                }
-                if pecerr.read_bit_band() {
-                    peccf.set_bit_band();
-                    break I2CError::Pecerr;
-                }
-                yield;
+        self.int_er.add_future(fib::new_fn(move || {
+            if berr.read_bit_band() {
+                berrcf.set_bit_band();
+                fib::Complete(I2CError::Berr)
+            } else if ovr.read_bit_band() {
+                ovrcf.set_bit_band();
+                fib::Complete(I2CError::Ovr)
+            } else if arlo.read_bit_band() {
+                arlocf.set_bit_band();
+                fib::Complete(I2CError::Arlo)
+            } else if timeout.read_bit_band() {
+                timoutcf.set_bit_band();
+                fib::Complete(I2CError::Timeout)
+            } else if alert.read_bit_band() {
+                alertcf.set_bit_band();
+                fib::Complete(I2CError::Alert)
+            } else if pecerr.read_bit_band() {
+                peccf.set_bit_band();
+                fib::Complete(I2CError::Pecerr)
+            } else {
+                fib::Yielded(())
             }
         }))
     }
@@ -272,24 +272,22 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
         let stopf = *self.periph.i2c_isr.stopf();
         let nackcf = *self.periph.i2c_icr.nackcf();
         let stopcf = *self.periph.i2c_icr.stopcf();
-        self.int_ev.add_future(fib::new(move || {
-            loop {
-                if nackf.read_bit_band() {
-                    nackcf.set_bit_band();
-                    break I2CBreak::Nack;
-                }
-                if stopf.read_bit_band() {
-                    stopcf.set_bit_band();
-                    break I2CBreak::Stop;
-                }
-                yield;
+        self.int_ev.add_future(fib::new_fn(move || {
+            if nackf.read_bit_band() {
+                nackcf.set_bit_band();
+                fib::Complete(I2CBreak::Nack)
+            } else if stopf.read_bit_band() {
+                stopcf.set_bit_band();
+                fib::Complete(I2CBreak::Stop)
+            } else {
+                fib::Yielded(())
             }
         }))
     }
 
     async fn read_impl<Rx: DmaChMap>(
         &self,
-        dma_rx: &DmaChEn<Rx, impl IntToken<Att>>,
+        dma_rx: &DmaChEn<Rx, impl IntToken>,
         buf: &mut [u8],
         slave_addr: u8,
         mut i2c_cr1_val: T::I2CCr1Val,
@@ -356,7 +354,7 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
 
     async fn write_impl<Tx: DmaChMap>(
         &self,
-        dma_tx: &DmaChEn<Tx, impl IntToken<Att>>,
+        dma_tx: &DmaChEn<Tx, impl IntToken>,
         buf: &[u8],
         slave_addr: u8,
         mut i2c_cr1_val: T::I2CCr1Val,
@@ -446,10 +444,7 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
         self.periph.i2c_cr2.start().set(val);
     }
 
-    fn init_dma_rx_ccr<Rx: DmaChMap>(
-        &self,
-        dma_rx: &DmaChEn<Rx, impl IntToken<Att>>,
-    ) -> Rx::DmaCcrVal {
+    fn init_dma_rx_ccr<Rx: DmaChMap>(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) -> Rx::DmaCcrVal {
         let mut val = dma_rx.ccr().default_val();
         dma_rx.ccr().mem2mem().clear(&mut val);
         dma_rx.ccr().msize().write(&mut val, 0b00);
@@ -465,10 +460,7 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
         val
     }
 
-    fn init_dma_tx_ccr<Tx: DmaChMap>(
-        &self,
-        dma_tx: &DmaChEn<Tx, impl IntToken<Att>>,
-    ) -> Tx::DmaCcrVal {
+    fn init_dma_tx_ccr<Tx: DmaChMap>(&self, dma_tx: &DmaChEn<Tx, impl IntToken>) -> Tx::DmaCcrVal {
         let mut val = dma_tx.ccr().default_val();
         dma_tx.ccr().mem2mem().clear(&mut val);
         dma_tx.ccr().msize().write(&mut val, 0b00);
@@ -486,7 +478,7 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
 }
 
 #[allow(missing_docs)]
-impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
+impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
     #[inline]
     pub fn cr1(&self) -> &T::SI2CCr1 {
         &self.periph.i2c_cr1
@@ -503,21 +495,21 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> I2CEn<T, Ev, Er> {
     }
 }
 
-impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> InventoryResource for I2CEn<T, Ev, Er> {
-    fn teardown(&mut self) {
-        self.periph.rcc_apb1enr_i2cen.clear_bit()
+impl<T: I2CMap, Ev: IntToken, Er: IntToken> inventory::Item for I2CEn<T, Ev, Er> {
+    fn teardown(&mut self, _token: &mut inventory::GuardToken<Self>) {
+        self.periph.rcc_busenr_i2cen.clear_bit()
     }
 }
 
 impl<T, Ev, Er, Rx> DrvDmaRx<Rx> for I2C<T, Ev, Er>
 where
     T: I2CMap,
-    Ev: IntToken<Att>,
-    Er: IntToken<Att>,
+    Ev: IntToken,
+    Er: IntToken,
     Rx: DmaChMap,
 {
     #[inline]
-    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
+    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) {
         self.0.dma_rx_paddr_init(dma_rx);
     }
 }
@@ -525,12 +517,12 @@ where
 impl<T, Ev, Er, Tx> DrvDmaTx<Tx> for I2C<T, Ev, Er>
 where
     T: I2CMap,
-    Ev: IntToken<Att>,
-    Er: IntToken<Att>,
+    Ev: IntToken,
+    Er: IntToken,
     Tx: DmaChMap,
 {
     #[inline]
-    fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Att>>) {
+    fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken>) {
         self.0.dma_tx_paddr_init(dma_tx);
     }
 }
@@ -538,11 +530,11 @@ where
 impl<T, Ev, Er, Rx> DrvDmaRx<Rx> for I2CEn<T, Ev, Er>
 where
     T: I2CMap,
-    Ev: IntToken<Att>,
-    Er: IntToken<Att>,
+    Ev: IntToken,
+    Er: IntToken,
     Rx: DmaChMap,
 {
-    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken<Att>>) {
+    fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) {
         unsafe { dma_rx.set_paddr(self.periph.i2c_rxdr.to_ptr()) };
     }
 }
@@ -550,16 +542,16 @@ where
 impl<T, Ev, Er, Tx> DrvDmaTx<Tx> for I2CEn<T, Ev, Er>
 where
     T: I2CMap,
-    Ev: IntToken<Att>,
-    Er: IntToken<Att>,
+    Ev: IntToken,
+    Er: IntToken,
     Tx: DmaChMap,
 {
-    fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken<Att>>) {
+    fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken>) {
         unsafe { dma_tx.set_paddr(self.periph.i2c_txdr.to_mut_ptr()) };
     }
 }
 
-impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> DrvRcc for I2C<T, Ev, Er> {
+impl<T: I2CMap, Ev: IntToken, Er: IntToken> DrvRcc for I2C<T, Ev, Er> {
     #[inline]
     fn reset(&mut self) {
         self.0.reset();
@@ -576,28 +568,28 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> DrvRcc for I2C<T, Ev, Er> 
     }
 }
 
-impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> DrvRcc for I2CEn<T, Ev, Er> {
+impl<T: I2CMap, Ev: IntToken, Er: IntToken> DrvRcc for I2CEn<T, Ev, Er> {
     fn reset(&mut self) {
-        self.periph.rcc_apb1rstr_i2crst.set_bit();
+        self.periph.rcc_busrstr_i2crst.set_bit();
     }
 
     fn disable_stop_mode(&self) {
-        self.periph.rcc_apb1smenr_i2csmen.clear_bit();
+        self.periph.rcc_bussmenr_i2csmen.clear_bit();
     }
 
     fn enable_stop_mode(&self) {
-        self.periph.rcc_apb1smenr_i2csmen.set_bit();
+        self.periph.rcc_bussmenr_i2csmen.set_bit();
     }
 }
 
-impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> DrvClockSel for I2C<T, Ev, Er> {
+impl<T: I2CMap, Ev: IntToken, Er: IntToken> DrvClockSel for I2C<T, Ev, Er> {
     #[inline]
     fn clock_sel(&self, value: u32) {
         self.0.clock_sel(value);
     }
 }
 
-impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> DrvClockSel for I2CEn<T, Ev, Er> {
+impl<T: I2CMap, Ev: IntToken, Er: IntToken> DrvClockSel for I2CEn<T, Ev, Er> {
     fn clock_sel(&self, value: u32) {
         self.periph.rcc_ccipr_i2csel.write_bits(value);
     }
@@ -605,28 +597,28 @@ impl<T: I2CMap, Ev: IntToken<Att>, Er: IntToken<Att>> DrvClockSel for I2CEn<T, E
 
 impl From<DmaTransferError> for I2CDmaError {
     fn from(err: DmaTransferError) -> Self {
-        I2CDmaError::Dma(err)
+        Self::Dma(err)
     }
 }
 
 impl From<I2CBreak> for I2CDmaError {
     fn from(err: I2CBreak) -> Self {
-        I2CDmaError::I2CBreak(err)
+        Self::I2CBreak(err)
     }
 }
 
 impl From<I2CError> for I2CDmaError {
     fn from(err: I2CError) -> Self {
-        I2CDmaError::I2CError(err)
+        Self::I2CError(err)
     }
 }
 
 impl fmt::Display for I2CDmaError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            I2CDmaError::Dma(err) => write!(f, "DMA error: {}", err),
-            I2CDmaError::I2CBreak(err) => write!(f, "I2C failure: {}", err),
-            I2CDmaError::I2CError(err) => write!(f, "I2C error: {}", err),
+            Self::Dma(err) => write!(f, "DMA error: {}", err),
+            Self::I2CBreak(err) => write!(f, "I2C failure: {}", err),
+            Self::I2CError(err) => write!(f, "I2C error: {}", err),
         }
     }
 }
@@ -634,12 +626,12 @@ impl fmt::Display for I2CDmaError {
 impl fmt::Display for I2CError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            I2CError::Berr => write!(f, "I2C bus error."),
-            I2CError::Ovr => write!(f, "I2C overrun."),
-            I2CError::Arlo => write!(f, "I2C arbitration lost."),
-            I2CError::Timeout => write!(f, "I2C timeout."),
-            I2CError::Alert => write!(f, "I2C SMBus alert."),
-            I2CError::Pecerr => write!(f, "I2C PEC error."),
+            Self::Berr => write!(f, "I2C bus error."),
+            Self::Ovr => write!(f, "I2C overrun."),
+            Self::Arlo => write!(f, "I2C arbitration lost."),
+            Self::Timeout => write!(f, "I2C timeout."),
+            Self::Alert => write!(f, "I2C SMBus alert."),
+            Self::Pecerr => write!(f, "I2C PEC error."),
         }
     }
 }
@@ -647,8 +639,8 @@ impl fmt::Display for I2CError {
 impl fmt::Display for I2CBreak {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            I2CBreak::Nack => write!(f, "I2C NACK received."),
-            I2CBreak::Stop => write!(f, "I2C STOP received."),
+            Self::Nack => write!(f, "I2C NACK received."),
+            Self::Stop => write!(f, "I2C STOP received."),
         }
     }
 }

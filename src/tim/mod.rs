@@ -11,9 +11,10 @@ pub use self::{
 };
 
 use crate::common::{DrvClockSel, DrvRcc};
+use core::num::NonZeroUsize;
 use drone_core::{
     bitfield::Bitfield,
-    inventory::{Inventory0, InventoryGuard, InventoryResource},
+    inventory::{self, Inventory0, Inventory1},
 };
 use drone_cortex_m::{
     drv::timer::{Timer, TimerInterval, TimerOverflow, TimerSleep, TimerStop},
@@ -22,10 +23,10 @@ use drone_cortex_m::{
 };
 
 /// Timer driver.
-pub struct Tim<T: TimPeriph, I: IntToken<Att>>(Inventory0<TimEn<T, I>>);
+pub struct Tim<T: TimPeriph, I: IntToken>(Inventory0<TimEn<T, I>>);
 
 /// Timer enabled driver.
-pub struct TimEn<T: TimPeriph, I: IntToken<Att>> {
+pub struct TimEn<T: TimPeriph, I: IntToken> {
     periph: T::Diverged,
     int: I,
 }
@@ -41,32 +42,32 @@ pub trait TimPeriph {
 
 #[doc(hidden)]
 pub trait TimDiverged: TimerStop + Sized + Send + Sync + 'static {
-    type RccApbenr: SRwRegBitBand;
-    type RccApbenrTimen: SRwRwRegFieldBitBand<Reg = Self::RccApbenr>;
-    type RccApbrstr: SRwRegBitBand;
-    type RccApbrstrTimrst: SRwRwRegFieldBitBand<Reg = Self::RccApbrstr>;
-    type RccApbsmenr: SRwRegBitBand;
-    type RccApbsmenrTimsmen: SRwRwRegFieldBitBand<Reg = Self::RccApbsmenr>;
+    type RccBusenr: SRwRegBitBand;
+    type RccBusenrTimen: SRwRwRegFieldBitBand<Reg = Self::RccBusenr>;
+    type RccBusrstr: SRwRegBitBand;
+    type RccBusrstrTimrst: SRwRwRegFieldBitBand<Reg = Self::RccBusrstr>;
+    type RccBussmenr: SRwRegBitBand;
+    type RccBussmenrTimsmen: SRwRwRegFieldBitBand<Reg = Self::RccBussmenr>;
 
-    fn rcc_apbenr_timen(&self) -> &Self::RccApbenrTimen;
-    fn rcc_apbrstr_timrst(&self) -> &Self::RccApbrstrTimrst;
-    fn rcc_apbsmenr_timsmen(&self) -> &Self::RccApbsmenrTimsmen;
+    fn rcc_busenr_timen(&self) -> &Self::RccBusenrTimen;
+    fn rcc_busrstr_timrst(&self) -> &Self::RccBusrstrTimrst;
+    fn rcc_bussmenr_timsmen(&self) -> &Self::RccBussmenrTimsmen;
 
-    fn presc(&mut self, value: u16);
+    fn presc(&mut self, value: u32);
 
-    fn sleep<I: IntToken<Att>>(&mut self, duration: usize, int: I) -> TimerSleep<'_, Self>;
+    fn sleep<I: IntToken>(&mut self, duration: u32, int: I) -> TimerSleep<'_, Self>;
 
-    fn interval<I: IntToken<Att>>(
+    fn interval<I: IntToken>(
         &mut self,
-        duration: usize,
+        duration: u32,
         int: I,
-    ) -> TimerInterval<'_, Self, Result<(), TimerOverflow>>;
+    ) -> TimerInterval<'_, Self, Result<NonZeroUsize, TimerOverflow>>;
 
-    fn interval_skip<I: IntToken<Att>>(
+    fn interval_skip<I: IntToken>(
         &mut self,
-        duration: usize,
+        duration: u32,
         int: I,
-    ) -> TimerInterval<'_, Self, ()>;
+    ) -> TimerInterval<'_, Self, NonZeroUsize>;
 }
 
 #[doc(hidden)]
@@ -78,7 +79,7 @@ pub trait TimDivergedClockSel: TimDiverged {
     fn rcc_ccipr_timsel(&self) -> &Self::RccCciprTimsel;
 }
 
-impl<T: TimPeriph, I: IntToken<Att>> Tim<T, I> {
+impl<T: TimPeriph, I: IntToken> Tim<T, I> {
     /// Creates a new [`Tim`].
     #[inline]
     pub fn new(periph: T, int: I) -> Self {
@@ -101,29 +102,35 @@ impl<T: TimPeriph, I: IntToken<Att>> Tim<T, I> {
     /// Releases the peripheral.
     #[inline]
     pub fn free(self) -> T::Diverged {
-        self.0.free().periph
+        Inventory0::free(self.0).periph
     }
 
     /// Enables timer clock.
-    pub fn enable(&mut self) -> InventoryGuard<'_, TimEn<T, I>> {
+    pub fn enable(&mut self) -> inventory::Guard<'_, TimEn<T, I>> {
         self.setup();
-        self.0.guard()
+        Inventory0::guard(&mut self.0)
     }
 
     /// Enables timer clock.
-    pub fn into_enabled(self) -> Inventory0<TimEn<T, I>> {
+    pub fn into_enabled(self) -> Inventory1<TimEn<T, I>> {
         self.setup();
-        self.0
+        let (enabled, token) = self.0.share1();
+        // To be recreated in `from_enabled()`.
+        drop(token);
+        enabled
     }
 
     /// Disables timer clock.
-    pub fn from_enabled(mut enabled: Inventory0<TimEn<T, I>>) -> Self {
-        enabled.teardown();
+    pub fn from_enabled(enabled: Inventory1<TimEn<T, I>>) -> Self {
+        // Restoring the token dropped in `into_enabled()`.
+        let token = unsafe { inventory::Token::new() };
+        let mut enabled = enabled.merge1(token);
+        Inventory0::teardown(&mut enabled);
         Self(enabled)
     }
 
     fn setup(&self) {
-        let timen = &self.0.periph.rcc_apbenr_timen();
+        let timen = &self.0.periph.rcc_busenr_timen();
         if timen.read_bit() {
             panic!("Timer wasn't turned off");
         }
@@ -131,39 +138,39 @@ impl<T: TimPeriph, I: IntToken<Att>> Tim<T, I> {
     }
 }
 
-impl<T: TimPeriph, I: IntToken<Att>> TimEn<T, I> {
+impl<T: TimPeriph, I: IntToken> TimEn<T, I> {
     /// Sets the counter clock prescaler.
-    pub fn presc(&mut self, value: u16) {
+    pub fn presc(&mut self, value: u32) {
         self.periph.presc(value);
     }
 }
 
-impl<T: TimPeriph, I: IntToken<Att>> InventoryResource for TimEn<T, I> {
-    fn teardown(&mut self) {
-        self.periph.rcc_apbenr_timen().clear_bit()
+impl<T: TimPeriph, I: IntToken> inventory::Item for TimEn<T, I> {
+    fn teardown(&mut self, _token: &mut inventory::GuardToken<Self>) {
+        self.periph.rcc_busenr_timen().clear_bit()
     }
 }
 
-impl<T: TimPeriph, I: IntToken<Att>> Timer for TimEn<T, I> {
+impl<T: TimPeriph, I: IntToken> Timer for TimEn<T, I> {
     type Stop = T::Diverged;
 
-    fn sleep(&mut self, duration: usize) -> TimerSleep<'_, Self::Stop> {
+    fn sleep(&mut self, duration: u32) -> TimerSleep<'_, Self::Stop> {
         self.periph.sleep(duration, self.int)
     }
 
     fn interval(
         &mut self,
-        duration: usize,
-    ) -> TimerInterval<'_, Self::Stop, Result<(), TimerOverflow>> {
+        duration: u32,
+    ) -> TimerInterval<'_, Self::Stop, Result<NonZeroUsize, TimerOverflow>> {
         self.periph.interval(duration, self.int)
     }
 
-    fn interval_skip(&mut self, duration: usize) -> TimerInterval<'_, Self::Stop, ()> {
+    fn interval_skip(&mut self, duration: u32) -> TimerInterval<'_, Self::Stop, NonZeroUsize> {
         self.periph.interval_skip(duration, self.int)
     }
 }
 
-impl<T: TimPeriph, I: IntToken<Att>> DrvRcc for Tim<T, I> {
+impl<T: TimPeriph, I: IntToken> DrvRcc for Tim<T, I> {
     #[inline]
     fn reset(&mut self) {
         self.0.reset();
@@ -180,21 +187,21 @@ impl<T: TimPeriph, I: IntToken<Att>> DrvRcc for Tim<T, I> {
     }
 }
 
-impl<T: TimPeriph, I: IntToken<Att>> DrvRcc for TimEn<T, I> {
+impl<T: TimPeriph, I: IntToken> DrvRcc for TimEn<T, I> {
     fn reset(&mut self) {
-        self.periph.rcc_apbrstr_timrst().set_bit();
+        self.periph.rcc_busrstr_timrst().set_bit();
     }
 
     fn disable_stop_mode(&self) {
-        self.periph.rcc_apbsmenr_timsmen().clear_bit();
+        self.periph.rcc_bussmenr_timsmen().clear_bit();
     }
 
     fn enable_stop_mode(&self) {
-        self.periph.rcc_apbsmenr_timsmen().set_bit();
+        self.periph.rcc_bussmenr_timsmen().set_bit();
     }
 }
 
-impl<T: TimPeriph, I: IntToken<Att>> DrvClockSel for Tim<T, I>
+impl<T: TimPeriph, I: IntToken> DrvClockSel for Tim<T, I>
 where
     T::Diverged: TimDivergedClockSel,
 {
@@ -204,7 +211,7 @@ where
     }
 }
 
-impl<T: TimPeriph, I: IntToken<Att>> DrvClockSel for TimEn<T, I>
+impl<T: TimPeriph, I: IntToken> DrvClockSel for TimEn<T, I>
 where
     T::Diverged: TimDivergedClockSel,
 {

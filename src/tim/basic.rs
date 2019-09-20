@@ -1,5 +1,5 @@
 use super::{TimDiverged, TimPeriph};
-use core::convert::identity;
+use core::{convert::identity, num::NonZeroUsize};
 use drone_cortex_m::{
     drv::timer::{TimerInterval, TimerOverflow, TimerSleep, TimerStop},
     fib::{self, Fiber},
@@ -11,9 +11,9 @@ use drone_stm32_map::periph::tim::basic::{traits::*, BasicTimMap, BasicTimPeriph
 /// Basic timer diverged peripheral.
 #[allow(missing_docs)]
 pub struct BasicTimDiverged<T: BasicTimMap> {
-    pub rcc_apb1enr1_timen: T::SRccApb1Enr1Timen,
-    pub rcc_apb1rstr1_timrst: T::SRccApb1Rstr1Timrst,
-    pub rcc_apb1smenr1_timsmen: T::SRccApb1Smenr1Timsmen,
+    pub rcc_busenr_timen: T::SRccBusenrTimen,
+    pub rcc_busrstr_timrst: T::SRccBusrstrTimrst,
+    pub rcc_bussmenr_timsmen: T::SRccBussmenrTimsmen,
     pub tim_cr1: T::STimCr1,
     pub tim_cr2: T::STimCr2,
     pub tim_dier: T::STimDier,
@@ -30,9 +30,9 @@ impl<T: BasicTimMap> TimPeriph for BasicTimPeriph<T> {
     #[inline]
     fn diverge(self) -> Self::Diverged {
         BasicTimDiverged {
-            rcc_apb1enr1_timen: self.rcc_apb1enr1_timen,
-            rcc_apb1rstr1_timrst: self.rcc_apb1rstr1_timrst,
-            rcc_apb1smenr1_timsmen: self.rcc_apb1smenr1_timsmen,
+            rcc_busenr_timen: self.rcc_busenr_timen,
+            rcc_busrstr_timrst: self.rcc_busrstr_timrst,
+            rcc_bussmenr_timsmen: self.rcc_bussmenr_timsmen,
             tim_cr1: self.tim_cr1,
             tim_cr2: self.tim_cr2,
             tim_dier: self.tim_dier,
@@ -46,33 +46,33 @@ impl<T: BasicTimMap> TimPeriph for BasicTimPeriph<T> {
 }
 
 impl<T: BasicTimMap> TimDiverged for BasicTimDiverged<T> {
-    type RccApbenr = T::SRccApb1Enr1;
-    type RccApbenrTimen = T::SRccApb1Enr1Timen;
-    type RccApbrstr = T::SRccApb1Rstr1;
-    type RccApbrstrTimrst = T::SRccApb1Rstr1Timrst;
-    type RccApbsmenr = T::SRccApb1Smenr1;
-    type RccApbsmenrTimsmen = T::SRccApb1Smenr1Timsmen;
+    type RccBusenr = T::SRccBusenr;
+    type RccBusenrTimen = T::SRccBusenrTimen;
+    type RccBusrstr = T::SRccBusrstr;
+    type RccBusrstrTimrst = T::SRccBusrstrTimrst;
+    type RccBussmenr = T::SRccBussmenr;
+    type RccBussmenrTimsmen = T::SRccBussmenrTimsmen;
 
     #[inline]
-    fn rcc_apbenr_timen(&self) -> &Self::RccApbenrTimen {
-        &self.rcc_apb1enr1_timen
+    fn rcc_busenr_timen(&self) -> &Self::RccBusenrTimen {
+        &self.rcc_busenr_timen
     }
 
     #[inline]
-    fn rcc_apbrstr_timrst(&self) -> &Self::RccApbrstrTimrst {
-        &self.rcc_apb1rstr1_timrst
+    fn rcc_busrstr_timrst(&self) -> &Self::RccBusrstrTimrst {
+        &self.rcc_busrstr_timrst
     }
 
     #[inline]
-    fn rcc_apbsmenr_timsmen(&self) -> &Self::RccApbsmenrTimsmen {
-        &self.rcc_apb1smenr1_timsmen
+    fn rcc_bussmenr_timsmen(&self) -> &Self::RccBussmenrTimsmen {
+        &self.rcc_bussmenr_timsmen
     }
 
     #[inline]
-    fn presc(&mut self, value: u16) {
+    fn presc(&mut self, value: u32) {
         self.tim_psc.store_val({
             let mut val = self.tim_psc.default_val();
-            self.tim_psc.psc().write(&mut val, u32::from(value));
+            self.tim_psc.psc().write(&mut val, value);
             val
         });
         self.tim_dier.reset();
@@ -90,15 +90,14 @@ impl<T: BasicTimMap> TimDiverged for BasicTimDiverged<T> {
     }
 
     #[inline]
-    fn sleep<I: IntToken<Att>>(&mut self, duration: usize, int: I) -> TimerSleep<'_, Self> {
+    fn sleep<I: IntToken>(&mut self, duration: u32, int: I) -> TimerSleep<'_, Self> {
         let uif = *self.tim_sr.uif();
-        let future = Box::pin(int.add_future(fib::new(move || {
-            loop {
-                if uif.read_bit() {
-                    uif.clear_bit();
-                    break;
-                }
-                yield;
+        let future = Box::pin(int.add_future(fib::new_fn(move || {
+            if uif.read_bit() {
+                uif.clear_bit();
+                fib::Complete(())
+            } else {
+                fib::Yielded(())
             }
         })));
         self.schedule(duration, |mut val| {
@@ -109,12 +108,12 @@ impl<T: BasicTimMap> TimDiverged for BasicTimDiverged<T> {
     }
 
     #[inline]
-    fn interval<I: IntToken<Att>>(
+    fn interval<I: IntToken>(
         &mut self,
-        duration: usize,
+        duration: u32,
         int: I,
-    ) -> TimerInterval<'_, Self, Result<(), TimerOverflow>> {
-        let stream = Box::pin(int.add_stream(
+    ) -> TimerInterval<'_, Self, Result<NonZeroUsize, TimerOverflow>> {
+        let stream = Box::pin(int.add_stream_pulse(
             || Err(TimerOverflow),
             Self::interval_fib(*self.tim_sr.uif()),
         ));
@@ -123,12 +122,12 @@ impl<T: BasicTimMap> TimDiverged for BasicTimDiverged<T> {
     }
 
     #[inline]
-    fn interval_skip<I: IntToken<Att>>(
+    fn interval_skip<I: IntToken>(
         &mut self,
-        duration: usize,
+        duration: u32,
         int: I,
-    ) -> TimerInterval<'_, Self, ()> {
-        let stream = Box::pin(int.add_stream_skip(Self::interval_fib(*self.tim_sr.uif())));
+    ) -> TimerInterval<'_, Self, NonZeroUsize> {
+        let stream = Box::pin(int.add_stream_pulse_skip(Self::interval_fib(*self.tim_sr.uif())));
         self.schedule(duration, identity);
         TimerInterval::new(self, stream)
     }
@@ -144,23 +143,22 @@ impl<T: BasicTimMap> TimerStop for BasicTimDiverged<T> {
 impl<T: BasicTimMap> BasicTimDiverged<T> {
     fn interval_fib<R>(
         uif: T::CTimSrUif,
-    ) -> impl Fiber<Input = (), Yield = Option<()>, Return = R> {
-        fib::new(move || {
-            loop {
-                if uif.read_bit() {
-                    uif.set_bit();
-                    yield Some(());
-                }
-                yield None;
+    ) -> impl Fiber<Input = (), Yield = Option<usize>, Return = R> {
+        fib::new_fn(move || {
+            if uif.read_bit() {
+                uif.set_bit();
+                fib::Yielded(Some(1))
+            } else {
+                fib::Yielded(None)
             }
         })
     }
 
-    fn schedule(&self, duration: usize, f: impl FnOnce(T::TimCr1Val) -> T::TimCr1Val) {
+    fn schedule(&self, duration: u32, f: impl FnOnce(T::TimCr1Val) -> T::TimCr1Val) {
         self.tim_cnt.reset();
         self.tim_arr.store_val({
             let mut val = self.tim_arr.default_val();
-            self.tim_arr.arr().write(&mut val, duration as u32);
+            self.tim_arr.arr().write(&mut val, duration);
             val
         });
         self.tim_cr1.store_val({
