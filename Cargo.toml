@@ -26,21 +26,8 @@ tim = ["drone-stm32-map/tim"]
 uart = ["drone-stm32-map/uart"]
 
 [dependencies]
+core = { version = "0.11.0", package = "libcore-drone" }
+drone-core = { version = "0.11.0" }
+drone-cortex-m = { version = "0.11.0" }
+drone-stm32-map = { version = "0.11.0" }
 futures-preview = { version = "0.3.0-alpha", default-features = false }
-
-[dependencies.core]
-version = "0.11.0"
-package = "libcore-drone"
-path = "../../drone-os/libcore-drone"
-
-[dependencies.drone-core]
-version = "0.11.0"
-path = "../../drone-os/drone-core"
-
-[dependencies.drone-cortex-m]
-version = "0.11.0"
-path = "../../drone-os/drone-cortex-m"
-
-[dependencies.drone-stm32-map]
-version = "0.11.0"
-path = "../../drone-os/drone-stm32-map"
