@@ -1,10 +1,10 @@
 [package]
 name = "drone-stm32-drv"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Valentine Valyaeff <valentine.valyaeff@gmail.com>"]
 edition = "2018"
 repository = "https://github.com/centosa/drone-stm32-drv"
-documentation = "https://docs.rs/drone-stm32-drv/0.10.0"
+documentation = "https://docs.rs/drone-stm32-drv/0.11.0"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 description = """
@@ -17,26 +17,30 @@ maintenance = { status = "experimental" }
 [features]
 default = []
 std = ["drone-core/std", "drone-cortex-m/std", "futures-preview/std"]
-stm32f100 = ["drone-stm32-map/stm32f100"]
-stm32f101 = ["drone-stm32-map/stm32f101"]
-stm32f102 = ["drone-stm32-map/stm32f102"]
-stm32f103 = ["drone-stm32-map/stm32f103"]
-stm32f107 = ["drone-stm32-map/stm32f107"]
-stm32l4x1 = ["drone-stm32-map/stm32l4x1"]
-stm32l4x2 = ["drone-stm32-map/stm32l4x2"]
-stm32l4x3 = ["drone-stm32-map/stm32l4x3"]
-stm32l4x5 = ["drone-stm32-map/stm32l4x5"]
-stm32l4x6 = ["drone-stm32-map/stm32l4x6"]
-stm32l4r5 = ["drone-stm32-map/stm32l4r5"]
-stm32l4r7 = ["drone-stm32-map/stm32l4r7"]
-stm32l4r9 = ["drone-stm32-map/stm32l4r9"]
-stm32l4s5 = ["drone-stm32-map/stm32l4s5"]
-stm32l4s7 = ["drone-stm32-map/stm32l4s7"]
-stm32l4s9 = ["drone-stm32-map/stm32l4s9"]
+adc = ["drone-stm32-map/adc"]
+dma = ["drone-stm32-map/dma"]
+gpio = ["drone-stm32-map/gpio"]
+i2c = ["drone-stm32-map/i2c"]
+spi = ["drone-stm32-map/spi"]
+tim = ["drone-stm32-map/tim"]
+uart = ["drone-stm32-map/uart"]
 
 [dependencies]
-core = { version = "0.10.0", package = "libcore-drone" }
-drone-core = { version = "0.10.0" }
-drone-cortex-m = { version = "0.10.0" }
-drone-stm32-map = { version = "0.10.0" }
 futures-preview = { version = "0.3.0-alpha", default-features = false }
+
+[dependencies.core]
+version = "0.11.0"
+package = "libcore-drone"
+path = "../../drone-os/libcore-drone"
+
+[dependencies.drone-core]
+version = "0.11.0"
+path = "../../drone-os/drone-core"
+
+[dependencies.drone-cortex-m]
+version = "0.11.0"
+path = "../../drone-os/drone-cortex-m"
+
+[dependencies.drone-stm32-map]
+version = "0.11.0"
+path = "../../drone-os/drone-stm32-map"

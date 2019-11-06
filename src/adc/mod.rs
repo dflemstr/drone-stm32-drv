@@ -4,7 +4,11 @@ use crate::{
     common::{DrvClockSel, DrvDmaRx, DrvRcc},
     dma::DmaChEn,
 };
-#[cfg(any(feature = "stm32l4s5", feature = "stm32l4s7", feature = "stm32l4s9"))]
+#[cfg(any(
+    stm32_mcu = "stm32l4s5",
+    stm32_mcu = "stm32l4s7",
+    stm32_mcu = "stm32l4s9"
+))]
 use core::ptr::read_volatile;
 use drone_core::inventory::{self, Inventory0, Inventory1};
 use drone_cortex_m::{fib, reg::prelude::*, thr::prelude::*};
@@ -15,22 +19,22 @@ use drone_stm32_map::periph::{
 use futures::prelude::*;
 
 #[cfg(any(
-    feature = "stm32l4r5",
-    feature = "stm32l4r7",
-    feature = "stm32l4r9",
-    feature = "stm32l4s5",
-    feature = "stm32l4s7",
-    feature = "stm32l4s9"
+    stm32_mcu = "stm32l4r5",
+    stm32_mcu = "stm32l4r7",
+    stm32_mcu = "stm32l4r9",
+    stm32_mcu = "stm32l4s5",
+    stm32_mcu = "stm32l4s7",
+    stm32_mcu = "stm32l4s9"
 ))]
 mod com;
 
 #[cfg(any(
-    feature = "stm32l4r5",
-    feature = "stm32l4r7",
-    feature = "stm32l4r9",
-    feature = "stm32l4s5",
-    feature = "stm32l4s7",
-    feature = "stm32l4s9"
+    stm32_mcu = "stm32l4r5",
+    stm32_mcu = "stm32l4r7",
+    stm32_mcu = "stm32l4r9",
+    stm32_mcu = "stm32l4s5",
+    stm32_mcu = "stm32l4s7",
+    stm32_mcu = "stm32l4s9"
 ))]
 pub use self::com::*;
 
@@ -47,7 +51,6 @@ pub struct AdcEn<T: AdcMap, I: IntToken> {
 #[allow(missing_docs)]
 pub struct AdcDiverged<T: AdcMap> {
     pub rcc_busenr_adcen: T::SRccBusenrAdcen,
-    pub rcc_busrstr_adcrst: T::SRccBusrstrAdcrst,
     pub rcc_bussmenr_adcsmen: T::SRccBussmenrAdcsmen,
     pub rcc_ccipr_adcsel: T::SRccCciprAdcsel,
     pub adc_isr: T::CAdcIsr,
@@ -86,7 +89,6 @@ impl<T: AdcMap, I: IntToken> Adc<T, I> {
     pub fn new(periph: AdcPeriph<T>, int: I) -> Self {
         let periph = AdcDiverged {
             rcc_busenr_adcen: periph.rcc_busenr_adcen,
-            rcc_busrstr_adcrst: periph.rcc_busrstr_adcrst,
             rcc_bussmenr_adcsmen: periph.rcc_bussmenr_adcsmen,
             rcc_ccipr_adcsel: periph.rcc_ccipr_adcsel,
             adc_isr: periph.adc_isr.into_copy(),
@@ -238,7 +240,7 @@ impl<T: AdcMap, I: IntToken, Rx: DmaChMap> DrvDmaRx<Rx> for Adc<T, I> {
 
 impl<T: AdcMap, I: IntToken, Rx: DmaChMap> DrvDmaRx<Rx> for AdcEn<T, I> {
     fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) {
-        unsafe { dma_rx.set_paddr(self.periph.adc_dr.to_ptr()) };
+        unsafe { dma_rx.set_paddr(self.periph.adc_dr.as_ptr()) };
     }
 }
 
@@ -260,9 +262,7 @@ impl<T: AdcMap, I: IntToken> DrvRcc for Adc<T, I> {
 }
 
 impl<T: AdcMap, I: IntToken> DrvRcc for AdcEn<T, I> {
-    fn reset(&mut self) {
-        self.periph.rcc_busrstr_adcrst.set_bit();
-    }
+    fn reset(&mut self) {}
 
     fn disable_stop_mode(&self) {
         self.periph.rcc_bussmenr_adcsmen.clear_bit();
@@ -286,7 +286,11 @@ impl<T: AdcMap, I: IntToken> DrvClockSel for AdcEn<T, I> {
     }
 }
 
-#[cfg(any(feature = "stm32l4s5", feature = "stm32l4s7", feature = "stm32l4s9"))]
+#[cfg(any(
+    stm32_mcu = "stm32l4s5",
+    stm32_mcu = "stm32l4s7",
+    stm32_mcu = "stm32l4s9"
+))]
 /// Reads internal voltage reference (V<sub>REFINT</sub>).
 pub fn read_vref_cal() -> u16 {
     unsafe { read_volatile(0x1FFF_75AA as *const u16) }

@@ -7,7 +7,7 @@ STM32 peripheral drivers for Drone, an Embedded Operating System.
 ## Documentation
 
 - [Drone Book](https://book.drone-os.com/)
-- [API documentation](https://docs.rs/drone-stm32-drv/0.10.0)
+- [API documentation](https://docs.rs/drone-stm32-drv/0.11.0)
 
 ## Usage
 
@@ -15,7 +15,7 @@ Place the following to the Cargo.toml:
 
 ```toml
 [dependencies]
-drone-stm32-drv = { version = "0.10.0", features = [...] }
+drone-stm32-drv = { version = "0.11.0", features = [...] }
 ```
 
 ## License

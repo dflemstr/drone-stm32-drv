@@ -124,17 +124,17 @@ impl<T: SpiMap, I: IntToken> SpiEn<T, I> {
     #[inline]
     pub fn set_frame_8(&self, cr2: &mut T::SpiCr2Val) {
         #[cfg(any(
-            feature = "stm32l4x1",
-            feature = "stm32l4x2",
-            feature = "stm32l4x3",
-            feature = "stm32l4x5",
-            feature = "stm32l4x6",
-            feature = "stm32l4r5",
-            feature = "stm32l4r7",
-            feature = "stm32l4r9",
-            feature = "stm32l4s5",
-            feature = "stm32l4s7",
-            feature = "stm32l4s9"
+            stm32_mcu = "stm32l4x1",
+            stm32_mcu = "stm32l4x2",
+            stm32_mcu = "stm32l4x3",
+            stm32_mcu = "stm32l4x5",
+            stm32_mcu = "stm32l4x6",
+            stm32_mcu = "stm32l4r5",
+            stm32_mcu = "stm32l4r7",
+            stm32_mcu = "stm32l4r9",
+            stm32_mcu = "stm32l4s5",
+            stm32_mcu = "stm32l4s7",
+            stm32_mcu = "stm32l4s9"
         ))]
         {
             self.periph.spi_cr2.frxth().set(cr2);
@@ -171,13 +171,13 @@ impl<T: SpiMap, I: IntToken> SpiEn<T, I> {
     /// Reads a byte from the data register.
     #[inline]
     pub fn recv_byte(&self) -> u8 {
-        unsafe { read_volatile(self.periph.spi_dr.to_ptr() as *const _) }
+        unsafe { read_volatile(self.periph.spi_dr.as_ptr() as *const _) }
     }
 
     /// Reads a half word from the data register.
     #[inline]
     pub fn recv_hword(&self) -> u16 {
-        unsafe { read_volatile(self.periph.spi_dr.to_ptr() as *const _) }
+        unsafe { read_volatile(self.periph.spi_dr.as_ptr() as *const _) }
     }
 
     /// Waits while SPI is busy in communication or Tx buffer is not empty.
@@ -202,12 +202,12 @@ impl<T: SpiMap, I: IntToken> SpiEn<T, I> {
 
     #[inline]
     fn dr_send_byte(dr: &T::CSpiDr, value: u8) {
-        unsafe { write_volatile(dr.to_mut_ptr() as *mut _, value) };
+        unsafe { write_volatile(dr.as_mut_ptr() as *mut _, value) };
     }
 
     #[inline]
     fn dr_send_hword(dr: &T::CSpiDr, value: u16) {
-        unsafe { write_volatile(dr.to_mut_ptr() as *mut _, value) };
+        unsafe { write_volatile(dr.as_mut_ptr() as *mut _, value) };
     }
 }
 
@@ -256,13 +256,13 @@ impl<T: SpiMap, I: IntToken, Tx: DmaChMap> DrvDmaTx<Tx> for Spi<T, I> {
 
 impl<T: SpiMap, I: IntToken, Rx: DmaChMap> DrvDmaRx<Rx> for SpiEn<T, I> {
     fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) {
-        unsafe { dma_rx.set_paddr(self.periph.spi_dr.to_ptr()) };
+        unsafe { dma_rx.set_paddr(self.periph.spi_dr.as_ptr()) };
     }
 }
 
 impl<T: SpiMap, I: IntToken, Tx: DmaChMap> DrvDmaTx<Tx> for SpiEn<T, I> {
     fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken>) {
-        unsafe { dma_tx.set_paddr(self.periph.spi_dr.to_mut_ptr()) };
+        unsafe { dma_tx.set_paddr(self.periph.spi_dr.as_mut_ptr()) };
     }
 }
 

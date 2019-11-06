@@ -22,15 +22,15 @@ pub struct DmaChEn<T: DmaChMap, I: IntToken> {
 #[allow(missing_docs)]
 pub struct DmaChDiverged<T: DmaChMap> {
     pub dma_ccr: T::SDmaCcr,
-    pub dma_cmar: T::SDmaCmar,
+    pub dma_cm0ar: T::SDmaCm0Ar,
     pub dma_cndtr: T::SDmaCndtr,
     pub dma_cpar: T::SDmaCpar,
     #[cfg(any(
-        feature = "stm32l4x1",
-        feature = "stm32l4x2",
-        feature = "stm32l4x3",
-        feature = "stm32l4x5",
-        feature = "stm32l4x6"
+        stm32_mcu = "stm32l4x1",
+        stm32_mcu = "stm32l4x2",
+        stm32_mcu = "stm32l4x3",
+        stm32_mcu = "stm32l4x5",
+        stm32_mcu = "stm32l4x6"
     ))]
     pub dma_cselr_cs: T::SDmaCselrCs,
     pub dma_ifcr_cgif: T::CDmaIfcrCgif,
@@ -49,15 +49,15 @@ impl<T: DmaChMap, I: IntToken> DmaCh<T, I> {
     pub fn new(periph: DmaChPeriph<T>, int: I) -> Self {
         let periph = DmaChDiverged {
             dma_ccr: periph.dma_ccr,
-            dma_cmar: periph.dma_cmar,
+            dma_cm0ar: periph.dma_cm0ar,
             dma_cndtr: periph.dma_cndtr,
             dma_cpar: periph.dma_cpar,
             #[cfg(any(
-                feature = "stm32l4x1",
-                feature = "stm32l4x2",
-                feature = "stm32l4x3",
-                feature = "stm32l4x5",
-                feature = "stm32l4x6"
+                stm32_mcu = "stm32l4x1",
+                stm32_mcu = "stm32l4x2",
+                stm32_mcu = "stm32l4x3",
+                stm32_mcu = "stm32l4x5",
+                stm32_mcu = "stm32l4x6"
             ))]
             dma_cselr_cs: periph.dma_cselr_cs,
             dma_ifcr_cgif: periph.dma_ifcr_cgif.into_copy(),
@@ -147,7 +147,7 @@ impl<T: DmaChMap, I: IntToken> DmaChEn<T, I> {
 
     /// Returns he memory address.
     pub fn maddr<M>(&self) -> *mut M {
-        self.periph.dma_cmar.ma().read_bits() as _
+        self.periph.dma_cm0ar.m0a().read_bits() as _
     }
 
     /// Sets the memory address.
@@ -156,15 +156,15 @@ impl<T: DmaChMap, I: IntToken> DmaChEn<T, I> {
     ///
     /// The method works with raw pointer.
     pub unsafe fn set_maddr<M>(&self, addr: *const M) {
-        self.periph.dma_cmar.ma().write_bits(addr as _);
+        self.periph.dma_cm0ar.m0a().write_bits(addr as _);
     }
 
     #[cfg(any(
-        feature = "stm32l4x1",
-        feature = "stm32l4x2",
-        feature = "stm32l4x3",
-        feature = "stm32l4x5",
-        feature = "stm32l4x6"
+        stm32_mcu = "stm32l4x1",
+        stm32_mcu = "stm32l4x2",
+        stm32_mcu = "stm32l4x3",
+        stm32_mcu = "stm32l4x5",
+        stm32_mcu = "stm32l4x6"
     ))]
     /// Selects DMA channel.
     pub fn ch_select(&self, ch: u32) {

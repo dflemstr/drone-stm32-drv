@@ -27,6 +27,7 @@ where
     B: Future + Unpin,
     C: Future + Unpin,
 {
+    #[allow(dead_code)]
     pub fn new(a: A, b: B, c: C) -> Self {
         Self(Some((a, b, c)))
     }

@@ -162,7 +162,7 @@ impl<T: UartMap, I: IntToken> UartEn<T, I> {
         let rdr = self.periph.uart_rdr;
         fib::new_fn(move || {
             if rxne.read_bit_band() {
-                let byte = unsafe { read_volatile(rdr.to_ptr() as *const _) };
+                let byte = unsafe { read_volatile(rdr.as_ptr() as *const _) };
                 fib::Yielded(Some(byte))
             } else {
                 fib::Yielded(None)
@@ -193,13 +193,13 @@ impl<T: UartMap, I: IntToken, Tx: DmaChMap> DrvDmaTx<Tx> for Uart<T, I> {
 
 impl<T: UartMap, I: IntToken, Rx: DmaChMap> DrvDmaRx<Rx> for UartEn<T, I> {
     fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) {
-        unsafe { dma_rx.set_paddr(self.periph.uart_rdr.to_ptr()) };
+        unsafe { dma_rx.set_paddr(self.periph.uart_rdr.as_ptr()) };
     }
 }
 
 impl<T: UartMap, I: IntToken, Tx: DmaChMap> DrvDmaTx<Tx> for UartEn<T, I> {
     fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken>) {
-        unsafe { dma_tx.set_paddr(self.periph.uart_tdr.to_mut_ptr()) };
+        unsafe { dma_tx.set_paddr(self.periph.uart_tdr.as_mut_ptr()) };
     }
 }
 

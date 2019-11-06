@@ -300,7 +300,7 @@ impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
         unsafe { dma_rx.set_maddr(buf.as_mut_ptr()) };
         dma_rx.set_size(buf.len());
         dma_rx.ccr().store_val({
-            let mut rx_ccr = self.init_dma_rx_ccr(dma_rx);
+            let mut rx_ccr = Self::init_dma_rx_ccr(dma_rx);
             dma_rx.ccr().en().set(&mut rx_ccr);
             rx_ccr
         });
@@ -320,7 +320,7 @@ impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
             Output3::A(Ok(()), i2c_break, i2c_error) => {
                 drop(i2c_break);
                 drop(i2c_error);
-                dma_rx.ccr().store_val(self.init_dma_rx_ccr(dma_rx));
+                dma_rx.ccr().store_val(Self::init_dma_rx_ccr(dma_rx));
                 self.int_ev.trigger();
                 self.int_er.trigger();
                 Ok(())
@@ -328,7 +328,7 @@ impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
             Output3::A(Err(dma_rx_err), i2c_break, i2c_error) => {
                 drop(i2c_break);
                 drop(i2c_error);
-                dma_rx.ccr().store_val(self.init_dma_rx_ccr(dma_rx));
+                dma_rx.ccr().store_val(Self::init_dma_rx_ccr(dma_rx));
                 self.int_ev.trigger();
                 self.int_er.trigger();
                 Err(dma_rx_err.into())
@@ -336,7 +336,7 @@ impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
             Output3::B(dma_rx_fut, i2c_break, i2c_error) => {
                 drop(dma_rx_fut);
                 drop(i2c_error);
-                dma_rx.ccr().store_val(self.init_dma_rx_ccr(dma_rx));
+                dma_rx.ccr().store_val(Self::init_dma_rx_ccr(dma_rx));
                 dma_rx.int().trigger();
                 self.int_er.trigger();
                 Err(i2c_break.into())
@@ -344,7 +344,7 @@ impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
             Output3::C(dma_rx_fut, i2c_break, i2c_error) => {
                 drop(dma_rx_fut);
                 drop(i2c_break);
-                dma_rx.ccr().store_val(self.init_dma_rx_ccr(dma_rx));
+                dma_rx.ccr().store_val(Self::init_dma_rx_ccr(dma_rx));
                 dma_rx.int().trigger();
                 self.int_ev.trigger();
                 Err(i2c_error.into())
@@ -367,7 +367,7 @@ impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
         unsafe { dma_tx.set_maddr(buf.as_ptr()) };
         dma_tx.set_size(buf.len());
         dma_tx.ccr().store_val({
-            let mut tx_ccr = self.init_dma_tx_ccr(dma_tx);
+            let mut tx_ccr = Self::init_dma_tx_ccr(dma_tx);
             dma_tx.ccr().en().set(&mut tx_ccr);
             tx_ccr
         });
@@ -387,7 +387,7 @@ impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
             Output3::A(Ok(()), i2c_break, i2c_error) => {
                 drop(i2c_break);
                 drop(i2c_error);
-                dma_tx.ccr().store_val(self.init_dma_tx_ccr(dma_tx));
+                dma_tx.ccr().store_val(Self::init_dma_tx_ccr(dma_tx));
                 self.int_ev.trigger();
                 self.int_er.trigger();
                 Ok(())
@@ -395,7 +395,7 @@ impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
             Output3::A(Err(dma_tx_err), i2c_break, i2c_error) => {
                 drop(i2c_break);
                 drop(i2c_error);
-                dma_tx.ccr().store_val(self.init_dma_tx_ccr(dma_tx));
+                dma_tx.ccr().store_val(Self::init_dma_tx_ccr(dma_tx));
                 self.int_ev.trigger();
                 self.int_er.trigger();
                 Err(dma_tx_err.into())
@@ -403,7 +403,7 @@ impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
             Output3::B(dma_tx_fut, i2c_break, i2c_error) => {
                 drop(dma_tx_fut);
                 drop(i2c_error);
-                dma_tx.ccr().store_val(self.init_dma_tx_ccr(dma_tx));
+                dma_tx.ccr().store_val(Self::init_dma_tx_ccr(dma_tx));
                 dma_tx.int().trigger();
                 self.int_er.trigger();
                 Err(i2c_break.into())
@@ -411,7 +411,7 @@ impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
             Output3::C(dma_tx_fut, i2c_break, i2c_error) => {
                 drop(dma_tx_fut);
                 drop(i2c_break);
-                dma_tx.ccr().store_val(self.init_dma_tx_ccr(dma_tx));
+                dma_tx.ccr().store_val(Self::init_dma_tx_ccr(dma_tx));
                 dma_tx.int().trigger();
                 self.int_ev.trigger();
                 Err(i2c_error.into())
@@ -444,7 +444,7 @@ impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
         self.periph.i2c_cr2.start().set(val);
     }
 
-    fn init_dma_rx_ccr<Rx: DmaChMap>(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) -> Rx::DmaCcrVal {
+    fn init_dma_rx_ccr<Rx: DmaChMap>(dma_rx: &DmaChEn<Rx, impl IntToken>) -> Rx::DmaCcrVal {
         let mut val = dma_rx.ccr().default_val();
         dma_rx.ccr().mem2mem().clear(&mut val);
         dma_rx.ccr().msize().write(&mut val, 0b00);
@@ -460,7 +460,7 @@ impl<T: I2CMap, Ev: IntToken, Er: IntToken> I2CEn<T, Ev, Er> {
         val
     }
 
-    fn init_dma_tx_ccr<Tx: DmaChMap>(&self, dma_tx: &DmaChEn<Tx, impl IntToken>) -> Tx::DmaCcrVal {
+    fn init_dma_tx_ccr<Tx: DmaChMap>(dma_tx: &DmaChEn<Tx, impl IntToken>) -> Tx::DmaCcrVal {
         let mut val = dma_tx.ccr().default_val();
         dma_tx.ccr().mem2mem().clear(&mut val);
         dma_tx.ccr().msize().write(&mut val, 0b00);
@@ -535,7 +535,7 @@ where
     Rx: DmaChMap,
 {
     fn dma_rx_paddr_init(&self, dma_rx: &DmaChEn<Rx, impl IntToken>) {
-        unsafe { dma_rx.set_paddr(self.periph.i2c_rxdr.to_ptr()) };
+        unsafe { dma_rx.set_paddr(self.periph.i2c_rxdr.as_ptr()) };
     }
 }
 
@@ -547,7 +547,7 @@ where
     Tx: DmaChMap,
 {
     fn dma_tx_paddr_init(&self, dma_tx: &DmaChEn<Tx, impl IntToken>) {
-        unsafe { dma_tx.set_paddr(self.periph.i2c_txdr.to_mut_ptr()) };
+        unsafe { dma_tx.set_paddr(self.periph.i2c_txdr.as_mut_ptr()) };
     }
 }
 
