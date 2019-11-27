@@ -16,7 +16,7 @@ maintenance = { status = "experimental" }
 
 [features]
 default = []
-std = ["drone-core/std", "drone-cortex-m/std", "futures-preview/std"]
+std = ["drone-core/std", "drone-cortex-m/std", "futures/std"]
 adc = ["drone-stm32-map/adc"]
 dma = ["drone-stm32-map/dma"]
 gpio = ["drone-stm32-map/gpio"]
@@ -30,4 +30,4 @@ core = { version = "0.11.0", package = "libcore-drone" }
 drone-core = { version = "0.11.0" }
 drone-cortex-m = { version = "0.11.0" }
 drone-stm32-map = { version = "0.11.0" }
-futures-preview = { version = "0.3.0-alpha", default-features = false }
+futures = { version = "0.3.0", default-features = false }
